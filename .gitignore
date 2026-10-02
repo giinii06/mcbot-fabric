@@ -1,0 +1,35 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# runtime data
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# deps / build
+node_modules/
+dist/
+build/
+*.log
+
+# minecraft bridge build output
+minecraft-bridge/build/
+minecraft-bridge/out/
+minecraft-bridge/.gradle/
+*.jar
+!minecraft-bridge/libs/*.jar
+!minecraft-bridge/gradle/wrapper/gradle-wrapper.jar
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+
+# bridge shared secret (bot + plugin)
+.mc_bridge_secret

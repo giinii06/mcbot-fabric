@@ -1,0 +1,52 @@
+# =============================================================================
+# Discord bot for the Minecraft Java + Bedrock cross-play server
+#
+#   docker compose up -d     # start (bridge endpoint only until DISCORD_* set)
+#   docker compose logs -f   # follow logs
+#
+# Talks to the game server over the private external network "mc-discord"
+# (create once: docker network create mc-discord). The bridge port is bound to
+# loopback only so it is reachable from this host, never from the LAN.
+# =============================================================================
+name: mcbot
+
+services:
+  mcbot:
+    build: .
+    container_name: mcbot
+    restart: unless-stopped
+    init: true
+    # 호스트 유저와 동일하게 실행해 bind mount(data/) 소유권 유지
+    user: "${MCBOT_UID:-1001}:${MCBOT_GID:-1001}"
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:47865:47865"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - mc-discord
+    mem_limit: 384m
+    cpus: 0.5
+    cpu_shares: 512
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const r = await fetch('http://127.0.0.1:47865/health'); process.exit(r.ok ? 0 : 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  mc-discord:
+    external: true
