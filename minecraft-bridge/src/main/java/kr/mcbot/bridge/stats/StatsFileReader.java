@@ -18,6 +18,7 @@ public final class StatsFileReader {
 
     public static final String KEY_MODERN = "minecraft:play_time";
     public static final String KEY_LEGACY = "minecraft:play_one_minute";
+    public static final String KEY_DEATHS = "minecraft:deaths";
     public static final long NOT_FOUND = -1L;
 
     private StatsFileReader() {
@@ -28,23 +29,36 @@ public final class StatsFileReader {
     }
 
     public static long readTicks(Path statsFile) throws IOException {
-        if (statsFile == null || !Files.isRegularFile(statsFile)) {
-            return NOT_FOUND;
-        }
-        String raw = Files.readString(statsFile, StandardCharsets.UTF_8);
-        if (raw.isBlank()) {
-            return NOT_FOUND;
-        }
-        JsonElement root;
-        try {
-            root = JsonParser.parseString(raw);
-        } catch (RuntimeException ex) {
-            return NOT_FOUND;
-        }
-        if (!root.isJsonObject()) {
+        JsonElement root = parseOrNull(statsFile);
+        if (root == null) {
             return NOT_FOUND;
         }
         return findTicks(root.getAsJsonObject());
+    }
+
+    /** Total deaths recorded for the player (`minecraft:deaths`), or {@link #NOT_FOUND}. */
+    public static long readDeaths(Path statsFile) {
+        JsonElement root = parseOrNull(statsFile);
+        if (root == null) {
+            return NOT_FOUND;
+        }
+        return findKey(root.getAsJsonObject(), KEY_DEATHS);
+    }
+
+    private static JsonElement parseOrNull(Path statsFile) {
+        if (statsFile == null || !Files.isRegularFile(statsFile)) {
+            return null;
+        }
+        try {
+            String raw = Files.readString(statsFile, StandardCharsets.UTF_8);
+            if (raw.isBlank()) {
+                return null;
+            }
+            JsonElement root = JsonParser.parseString(raw);
+            return root.isJsonObject() ? root : null;
+        } catch (IOException | RuntimeException ex) {
+            return null;
+        }
     }
 
     static long findTicks(JsonObject root) {

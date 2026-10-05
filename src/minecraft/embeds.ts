@@ -22,7 +22,7 @@ export const EDITION_LABEL: Record<Edition, string> = {
 };
 
 function base(color: number): EmbedBuilder {
-  return new EmbedBuilder().setColor(color).setTimestamp(new Date());
+  return new EmbedBuilder().setColor(color);
 }
 
 function discordPart(member: DiscordDisplaySource | null): string | null {
@@ -43,17 +43,11 @@ export function playerLabel(member: DiscordDisplaySource | null, minecraftUserna
 }
 
 export function joinEmbed(player: PlayerRef, discord: DiscordDisplaySource | null): EmbedBuilder {
-  return base(EMBED_COLORS.JOIN)
-    .setTitle("마인크래프트 접속")
-    .setDescription(`**${playerLabel(discord, player.username)}** 님이 서버에 접속했습니다.`)
-    .addFields({ name: "플랫폼", value: EDITION_LABEL[player.edition], inline: true });
+  return base(EMBED_COLORS.JOIN).setDescription(`**${playerLabel(discord, player.username)}** 님이 서버에 접속했습니다.`);
 }
 
 export function quitEmbed(player: PlayerRef, discord: DiscordDisplaySource | null): EmbedBuilder {
-  return base(EMBED_COLORS.QUIT)
-    .setTitle("마인크래프트 퇴장")
-    .setDescription(`**${playerLabel(discord, player.username)}** 님이 서버를 떠났습니다.`)
-    .addFields({ name: "플랫폼", value: EDITION_LABEL[player.edition], inline: true });
+  return base(EMBED_COLORS.QUIT).setDescription(`**${playerLabel(discord, player.username)}** 님이 서버를 떠났습니다.`);
 }
 
 export interface DeathInput {
@@ -62,24 +56,69 @@ export interface DeathInput {
   message: string | null;
   cause: string | null;
   killer: string | null;
+  deathCount: number | null;
   ts: number;
 }
 
-export function deathEmbed(input: DeathInput): EmbedBuilder {
-  const embed = base(EMBED_COLORS.DEATH)
-    .setTitle("마인크래프트 사망")
-    .setDescription(`**${playerLabel(input.discord, input.player.username)}** 님이 사망했습니다.`)
-    .setTimestamp(new Date(input.ts));
+/** In-game style Korean death lines, keyed by the plugin's lowercase DamageCause. */
+const DEATH_CAUSE_KO: Record<string, (label: string, killer: string | null) => string> = {
+  contact: (label) => `${label}이(가) 선인장에 찔려 죽었습니다`,
+  entity_attack: (label, killer) =>
+    killer ? `${label}이(가) ${killer}에 의해 살해되었습니다` : `${label}이(가) 공격을 받고 사망했습니다`,
+  entity_sweep_attack: (label, killer) =>
+    killer ? `${label}이(가) ${killer}에 의해 살해되었습니다` : `${label}이(가) 공격을 받고 사망했습니다`,
+  projectile: (label, killer) =>
+    killer ? `${label}이(가) ${killer}의 공격에 맞아 죽었습니다` : `${label}이(가) 투사체에 맞아 죽었습니다`,
+  suffocation: (label) => `${label}이(가) 질식해 죽었습니다`,
+  fall: (label) => `${label}이(가) 너무 높은 곳에서 떨어져 죽었습니다`,
+  fire: (label) => `${label}이(가) 불타죽었습니다`,
+  fire_tick: (label) => `${label}이(가) 불타죽었습니다`,
+  melting: (label) => `${label}이(가) 녹아내려 죽었습니다`,
+  lava: (label) => `${label}이(가) 용암에 빠져 죽었습니다`,
+  drowning: (label) => `${label}이(가) 익사했습니다`,
+  block_explosion: (label) => `${label}이(가) 폭발했습니다`,
+  entity_explosion: (label) => `${label}이(가) 폭발했습니다`,
+  void: (label) => `${label}이(가) 세계 밖으로 떨어져 죽었습니다`,
+  lightning: (label) => `${label}이(가) 번개에 맞아 죽었습니다`,
+  suicide: (label) => `${label}이(가) 스스로 목숨을 끊었습니다`,
+  starve: (label) => `${label}이(가) 굶어 죽었습니다`,
+  poison: (label) => `${label}이(가) 독에 중독되어 죽었습니다`,
+  magic: (label) => `${label}이(가) 마법에 의해 죽었습니다`,
+  wither: (label) => `${label}이(가) 위더에 걸려 죽었습니다`,
+  falling_block: (label) => `${label}이(가) 떨어지는 블록에 깔려 죽었습니다`,
+  falling_anvil: (label) => `${label}이(가) 떨어지는 블록에 깔려 죽었습니다`,
+  thorns: (label) => `${label}이(가) 가시에 찔려 죽었습니다`,
+  dragon_breath: (label) => `${label}이(가) 드래곤 숨결에 맞아 죽었습니다`,
+  fly_into_wall: (label) => `${label}이(가) 벽에 부딪혀 죽었습니다`,
+  hot_floor: (label) => `${label}이(가) 뜨거운 바닥에 구워 죽었습니다`,
+  cramming: (label) => `${label}이(가) 너무 많은 개체로 목숨을 잃었습니다`,
+  freeze: (label) => `${label}이(가) 얼어붙어 죽었습니다`,
+  sonic_boom: (label) => `${label}이(가) 소나 충격파에 맞아 죽었습니다`,
+  kill: (label) => `${label}이(가) 처형되었습니다`,
+  world_border: (label) => `${label}이(가) 월드 보더 밖에서 사망했습니다`,
+  dryout: (label) => `${label}이(가) 말라 죽었습니다`,
+};
 
-  const details: string[] = [];
-  if (input.cause) details.push(`원인: ${input.cause}`);
-  if (input.killer) details.push(`처치: ${input.killer}`);
-  if (details.length > 0) embed.addFields({ name: "상세", value: truncate(details.join(" · "), 1024) });
+/** `기니 (giinii77) 이(가) 익사했습니다` - the in-game line, nickname swapped in. */
+export function deathLine(input: DeathInput): string {
+  const label = playerLabel(input.discord, input.player.username);
+  // `기니 (giinii77)` already ends in a parenthesis - add the separator the
+  // in-game message would get, but never for a bare Minecraft name.
+  const subject = label.endsWith(")") ? `${label} ` : label;
+  const killer = input.killer?.trim() || null;
+  const build = input.cause ? DEATH_CAUSE_KO[input.cause] : undefined;
+  return build ? build(subject, killer) : `${subject}이(가) 사망했습니다`;
+}
+
+export function deathEmbed(input: DeathInput): EmbedBuilder {
+  const lines = [deathLine(input)];
+  if (typeof input.deathCount === "number" && input.deathCount > 0) {
+    lines.push(`${input.deathCount}번째로 죽으셨네요 으!!@!!`);
+  }
 
   // Death payloads never carry coordinates / world / biome - enforced by the
   // payload schema on this side and by the plugin (strip component text).
-  if (input.message) embed.setFooter({ text: truncate(input.message, 200) });
-  return embed;
+  return base(EMBED_COLORS.DEATH).setDescription(lines.join("\n"));
 }
 
 export function advancementEmbed(
@@ -88,7 +127,6 @@ export function advancementEmbed(
   advancement: { key: string; title: string; description?: string | null },
 ): EmbedBuilder {
   const embed = base(EMBED_COLORS.ADVANCEMENT)
-    .setTitle("도전과제 달성")
     .setDescription(`**${playerLabel(discord, player.username)}** 님이 도전과제를 달성했습니다.`)
     .addFields({ name: "도전과제", value: truncate(advancement.title, 256) });
 
@@ -103,8 +141,8 @@ export function statusEmbed(
   max: number,
   players: PlayerRef[],
 ): EmbedBuilder {
-  const embed = base(EMBED_COLORS.SYSTEM).setTitle(
-    status === "started" ? "마인크래프트 서버 시작" : "마인크래프트 서버 종료",
+  const embed = base(EMBED_COLORS.SYSTEM).setDescription(
+    status === "started" ? "서버가 시작되었습니다." : "서버가 종료되었습니다.",
   );
   embed.addFields({ name: "접속 중", value: `${online}명 / ${max}명`, inline: true });
   if (players.length > 0) {

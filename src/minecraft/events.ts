@@ -1,7 +1,7 @@
 import type { InboundEvent, PlayerRef } from "../bridge/protocol";
 import type { Registration } from "../db/repositories";
 import type { Services } from "../services";
-import { advancementEmbed, deathEmbed, joinEmbed, quitEmbed, statusEmbed } from "./embeds";
+import { advancementEmbed, deathEmbed, joinEmbed, quitEmbed } from "./embeds";
 
 type GuildTargets = Map<string, Registration | null>;
 
@@ -38,9 +38,6 @@ async function memberFor(
 
 export async function handleBridgeEvent(services: Services, event: InboundEvent): Promise<void> {
   if (event.type === "server.status") {
-    const guilds = services.logChannels.guildsWithChannel();
-    const embed = statusEmbed(event.status, event.online, event.max, event.players);
-    await Promise.all(guilds.map((guildId) => services.logChannels.send(guildId, [embed])));
     return;
   }
 
@@ -65,6 +62,7 @@ export async function handleBridgeEvent(services: Services, event: InboundEvent)
             message: event.message ?? null,
             cause: event.cause ?? null,
             killer: event.killer ?? null,
+            deathCount: event.deathCount ?? null,
             ts: event.ts,
           }),
         ]);

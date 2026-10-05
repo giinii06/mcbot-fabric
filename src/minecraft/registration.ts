@@ -71,7 +71,13 @@ export async function prepareRegistration(services: Services, input: PrepareInpu
   }
 
   if (identity.status === "NONE") {
-    return { ok: false, reason: `**${validation.value}** 계정을 찾을 수 없습니다. 아이디를 확인해 주세요.` };
+    const reason = `**${validation.value}** 계정을 찾을 수 없습니다. 아이디를 확인해 주세요.`;
+    return {
+      ok: false,
+      reason: identity.bedrockCacheMiss
+        ? `${reason}\nGeyser 캐시에 없어 Xbox 계정을 조회하지 못했습니다. 잠시 후 다시 시도해 주세요.`
+        : reason,
+    };
   }
 
   const existing = services.repos.getRegistration(input.guildId, input.userId);

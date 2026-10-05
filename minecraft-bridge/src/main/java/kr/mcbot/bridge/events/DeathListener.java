@@ -2,6 +2,7 @@ package kr.mcbot.bridge.events;
 
 import kr.mcbot.bridge.bridge.PlayerIdentity;
 import kr.mcbot.bridge.publish.EventPublisher;
+import kr.mcbot.bridge.stats.DeathCounter;
 import kr.mcbot.bridge.util.ComponentText;
 import kr.mcbot.bridge.util.Validation;
 import org.bukkit.entity.Entity;
@@ -25,9 +26,11 @@ import java.util.Map;
 public final class DeathListener implements Listener {
 
     private final EventPublisher publisher;
+    private final DeathCounter deaths;
 
-    public DeathListener(EventPublisher publisher) {
+    public DeathListener(EventPublisher publisher, DeathCounter deaths) {
         this.publisher = publisher;
+        this.deaths = deaths;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -57,6 +60,7 @@ public final class DeathListener implements Listener {
 
         payload.put("cause", cause);
         payload.put("killer", killer == null || killer.isEmpty() ? null : killer);
+        payload.put("deathCount", deaths.onDeath(event.getEntity().getUniqueId()));
         publisher.submit(payload);
     }
 }

@@ -1,6 +1,7 @@
 # Minecraft 통합 (Discord 봇 ↔ Minecraft 서버)
 
-작성 기준: 2026-10-02 · 대상 서버 `~/minecraft` (Leaf 1.21.11 #179, Java 21, Geyser + Floodgate)
+작성 기준: 2026-10-02 · 대상 서버 `server/` (Leaf 1.21.11 #179, Java 21, Geyser + Floodgate)
+(구 경로 `~/minecraft`는 `server/`로 이관됨 — 아래 모든 `server/` 경로는 리포 루트 기준)
 
 ---
 
@@ -105,22 +106,22 @@ TS `src/minecraft/identity.ts` `bedrockUuid` / `isBedrockUuid` (테스트로 고
 ## 4. 배포 (실제 수행 명령)
 
 ```bash
-# 1) 전용 네트워크 (외부, 1회)
+# 1) 전용 네트워크 (외부, 1회 — server/install.sh가 자동 생성하지만 수동도 가능)
 docker network create mc-discord
 
-# 2) 게임 서버: compose 에 networks + ENABLE_WHITELIST 추가, 재기동
-cd ~/minecraft && ./mc.sh backup && docker compose up -d
+# 2) 게임 서버: server/에서 설치·기동 (멱등, 월드 보존)
+cd server && ./install.sh && ./mc.sh check && cd ..
 
-# 3) 플러그인 설치 (시크릿은 plugins/MinecraftBridge/config.yml, 600, 소유권 1001)
+# 3) 플러그인 설치 (시크릿은 server/data/plugins/MinecraftBridge/config.yml, 600)
 bun run minecraft:build-plugin
-cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar ~/minecraft/data/plugins/
+cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
+cd server && ./mc.sh restart && ./mc.sh check && cd ..
 
-# 4) 봇
-cd ~/cod/mcbot
+# 4) 봇 (리포 루트)
 docker compose up -d --build
 ```
 
-시크릿은 `.mc_bridge_secret` (호스트) ↔ `plugins/MinecraftBridge/config.yml` ↔ 봇 `.env`
+시크릿은 `.mc_bridge_secret` (호스트) ↔ `server/data/plugins/MinecraftBridge/config.yml` ↔ 봇 `.env`
 세 곳에서 동일해야 합니다. 값은 어디에도 출력하지 않습니다.
 
 ---
@@ -148,9 +149,11 @@ docker compose up -d --build
 
 ## 6. 알려진 제약 / 남은 수동 작업
 
-1. **Discord 신규 어플리케이션 생성(사람 수동)**: `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`,
-   `MINECRAFT_GUILD_ID` 를 `.env` 에 넣고 `docker compose up -d`,
-   `bun run minecraft:commands` 로 슬래시 명령 등록, `bun run invite` 로 초대.
+1. **Discord 신규 어플리케이션 생성(사람 수동)**: `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`
+   를 `.env` 에 넣고 `docker compose up -d`, `bun run minecraft:commands` (전역 등록,
+   봇이 들어간 모든 서버에 동일 적용, 반영 최대 1시간), `bun run invite` 로 서버별 초대.
+   길드 하나에 즉시 반영하려면 `bun run minecraft:commands -- <guildId>`
+   (그 길드의 전역 명령을 덮어쓰므로 명령 변경 시 다시 실행).
    이전 봇(`giinii_bot`, `bwxi_origin`) 은 건드리지 않습니다.
 2. **실접속 검증**: `player.join`/`quit`/`death`/`advancement` 은 온라인 모드 + 유효 계정을
    가진 실제 클라이언트가 필요합니다 (오프라인 인증·목업 접속 금지 정책).
@@ -163,7 +166,8 @@ docker compose up -d --build
 | 증상 | 확인 |
 |---|---|
 | 봇 `/health` 의 `minecraft:false` | `docker logs minecraft` 에 `MinecraftBridge listening` 인지, `docker network inspect mc-discord` 에 두 컨테이너 모두 속해 있는지 |
-| `401` 반환 | `.env` 와 `plugins/MinecraftBridge/config.yml` 의 시크릿이 같은지 (재시작 후 반영) |
+| `401` 반환 | 봇 `.env` 와 `server/data/plugins/MinecraftBridge/config.yml` 의 시크릿이 같은지 (재시작 후 반영) |
 | 봇 로그에 `discord disabled` | `.env` 의 `DISCORD_TOKEN`/`DISCORD_APPLICATION_ID` 미입력 (공란=미설정) |
 | `fwhitelist … entry was not created` | Floodgate 의 Xbox API 조회 실패 → gamertag 오타/미보유 계정 |
+| "계정을 찾을 수 없습니다 … 잠시 후 다시 시도" | Geyser Global API 가 **캐시에 있는 플레이어만** 반환 (공식 문서). 캐시 미보유 + Xbox Live API 레이트리밋이면 503 → 계정이 있어도 조회 불가. 서버의 `fwhitelist` 도 같은 API 라 동일 실패. 다른 Geyser 서버에 한 번 접속해 캐시에 올린 뒤 재시도 |
 | 이벤트가 중복 전시 | 봇 dedup 3분 TTL + 플러그인 재시도. 핸들러 실패(500)는 dedup 에 남지 않아 재시도가 재처리됨 |

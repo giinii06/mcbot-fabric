@@ -20,11 +20,9 @@ describe("loadEnv", () => {
       MC_BRIDGE_SECRET: "x".repeat(32),
       DISCORD_TOKEN: "",
       DISCORD_APPLICATION_ID: "",
-      MINECRAFT_GUILD_ID: "",
     });
     expect(env.DISCORD_TOKEN).toBeUndefined();
     expect(env.DISCORD_APPLICATION_ID).toBeUndefined();
-    expect(env.MINECRAFT_GUILD_ID).toBeUndefined();
     expect(discordEnabled(env)).toBe(false);
     expect(secretValues(env)).toEqual(["x".repeat(32)]);
   });

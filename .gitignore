@@ -7,6 +7,11 @@
 
 # runtime data
 data/
+server/data/
+backups/
+server/backups/
+secrets/
+server/secrets/
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal

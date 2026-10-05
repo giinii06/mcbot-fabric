@@ -21,6 +21,17 @@ export interface IdentityResult {
   status: IdentityStatus;
   java: JavaIdentity | null;
   bedrock: BedrockIdentity | null;
+  /**
+   * Geyser answered 503: the gamertag is not in their cache and their Xbox Live
+   * lookup is unavailable. The account can still be perfectly valid, so callers
+   * should say "try again later" instead of "this account does not exist".
+   */
+  bedrockCacheMiss?: boolean;
+}
+
+interface BedrockLookup {
+  identity: BedrockIdentity | null;
+  cacheMiss: boolean;
 }
 
 export interface IdentityCandidate {
@@ -142,15 +153,18 @@ export class IdentityService {
     return { uuid: dashedUuid(body.id), name: body.name };
   }
 
-  private async lookupBedrock(gamertag: string): Promise<BedrockIdentity | null> {
+  private async lookupBedrock(gamertag: string): Promise<BedrockLookup> {
     const response = await this.get(`${GEYSER_XUID}${encodeURIComponent(gamertag)}`, "Geyser");
-    if (response.status === 503 || response.status === 404 || response.status === 400) return null;
+    // 503 = "not cached, and we could not call the Xbox Live API" (see the
+    // Geyser Global API docs) - distinct from an account that simply does not exist.
+    if (response.status === 503) return { identity: null, cacheMiss: true };
+    if (response.status === 404 || response.status === 400) return { identity: null, cacheMiss: false };
     if (!response.ok) throw new IdentityLookupError("Bedrock ID 조회에 실패했습니다.");
     const body = (await response.json()) as { xuid?: number | string };
-    if (body.xuid === undefined || body.xuid === null) return null;
+    if (body.xuid === undefined || body.xuid === null) return { identity: null, cacheMiss: false };
     const xuid = String(body.xuid);
-    if (!/^\d{4,20}$/.test(xuid)) return null;
-    return { gamertag, xuid, uuid: bedrockUuid(xuid) };
+    if (!/^\d{4,20}$/.test(xuid)) return { identity: null, cacheMiss: false };
+    return { identity: { gamertag, xuid, uuid: bedrockUuid(xuid) }, cacheMiss: false };
   }
 
   /**
@@ -168,11 +182,17 @@ export class IdentityService {
     const [java, bedrock] = await Promise.all([this.lookupJava(input), this.lookupBedrock(input)]);
 
     let status: IdentityStatus = "NONE";
-    if (java && bedrock) status = "BOTH";
+    if (java && bedrock.identity) status = "BOTH";
     else if (java) status = "JAVA";
-    else if (bedrock) status = "BEDROCK";
+    else if (bedrock.identity) status = "BEDROCK";
 
-    const result: IdentityResult = { input, status, java, bedrock };
+    const result: IdentityResult = {
+      input,
+      status,
+      java,
+      bedrock: bedrock.identity,
+      ...(bedrock.cacheMiss ? { bedrockCacheMiss: true } : {}),
+    };
     this.cache.set(input.toLowerCase(), { result, expiresAt: this.now() + this.cacheTtlMs });
     if (this.cache.size > 500) {
       const oldest = this.cache.keys().next();

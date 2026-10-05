@@ -2,6 +2,7 @@ package kr.mcbot.bridge.events;
 
 import kr.mcbot.bridge.bridge.PlayerIdentity;
 import kr.mcbot.bridge.publish.EventPublisher;
+import kr.mcbot.bridge.stats.DeathCounter;
 import kr.mcbot.bridge.util.Validation;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -17,18 +18,22 @@ import java.util.UUID;
 public final class ConnectionListener implements Listener {
 
     private final EventPublisher publisher;
+    private final DeathCounter deaths;
 
-    public ConnectionListener(EventPublisher publisher) {
+    public ConnectionListener(EventPublisher publisher, DeathCounter deaths) {
         this.publisher = publisher;
+        this.deaths = deaths;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
+        deaths.onJoin(event.getPlayer().getUniqueId());
         publisher.submit(base("player.join", event.getPlayer().getUniqueId(), event.getPlayer().getName()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onQuit(PlayerQuitEvent event) {
+        deaths.onQuit(event.getPlayer().getUniqueId());
         Map<String, Object> payload = base("player.quit", event.getPlayer().getUniqueId(), event.getPlayer().getName());
         if (event.getReason() != null) {
             payload.put("reason", Validation.sanitizeText(event.getReason().name(), 64));

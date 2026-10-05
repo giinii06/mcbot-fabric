@@ -7,11 +7,16 @@ import kr.mcbot.bridge.events.AdvancementListener;
 import kr.mcbot.bridge.events.ConnectionListener;
 import kr.mcbot.bridge.events.DeathListener;
 import kr.mcbot.bridge.publish.EventPublisher;
+import kr.mcbot.bridge.stats.DeathCounter;
 import kr.mcbot.bridge.stats.PlaytimeService;
 import kr.mcbot.bridge.whitelist.WhitelistService;
 import org.bukkit.Bukkit;
+import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -31,6 +36,9 @@ import java.util.Map;
  */
 public final class MinecraftBridgePlugin extends JavaPlugin {
 
+    /** Hard cap shown everywhere (Discord status, server list) - kept in code. */
+    private static final int MAX_PLAYERS = 1000;
+
     private BridgeHttpServer httpServer;
     private EventPublisher publisher;
     private PlaytimeService playtime;
@@ -39,6 +47,8 @@ public final class MinecraftBridgePlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+
+        Bukkit.setMaxPlayers(MAX_PLAYERS);
 
         boolean enabled = getConfig().getBoolean("enabled", true);
         String secret = getConfig().getString("bot.secret", "");
@@ -82,8 +92,12 @@ public final class MinecraftBridgePlugin extends JavaPlugin {
             return;
         }
 
-        getServer().getPluginManager().registerEvents(new ConnectionListener(publisher), this);
-        getServer().getPluginManager().registerEvents(new DeathListener(publisher), this);
+        enforceKeepInventory();
+        getServer().getPluginManager().registerEvents(new KeepInventoryListener(), this);
+
+        DeathCounter deathCounter = new DeathCounter(resolveStatsDir());
+        getServer().getPluginManager().registerEvents(new ConnectionListener(publisher, deathCounter), this);
+        getServer().getPluginManager().registerEvents(new DeathListener(publisher, deathCounter), this);
         getServer().getPluginManager().registerEvents(new AdvancementListener(publisher), this);
 
         snapshotTask = Bukkit.getScheduler().runTaskTimer(
@@ -116,6 +130,29 @@ public final class MinecraftBridgePlugin extends JavaPlugin {
             httpServer = null;
         }
         getLogger().info("MinecraftBridge disabled");
+    }
+
+    /**
+     * keepInventory is tracked per dimension in Java Edition, so the rule has to
+     * be forced on every world (overworld, nether, end) and kept on for worlds
+     * that load later.
+     */
+    private void enforceKeepInventory() {
+        for (World world : Bukkit.getWorlds()) {
+            applyKeepInventory(world);
+        }
+    }
+
+    private void applyKeepInventory(World world) {
+        world.setGameRule(GameRule.KEEP_INVENTORY, true);
+        getLogger().info("keepInventory=true enforced on " + world.getName());
+    }
+
+    private final class KeepInventoryListener implements Listener {
+        @EventHandler
+        public void onWorldLoad(WorldLoadEvent event) {
+            applyKeepInventory(event.getWorld());
+        }
     }
 
     private Path resolveStatsDir() {

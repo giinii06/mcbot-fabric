@@ -1,0 +1,18 @@
+# managed by server/install.sh — 이 폴더의 생성물(월드·백업·시크릿)은 커밋하지 않음
+# --- secrets (never commit) ---
+secrets/
+*.pem
+**/key.pem
+.env
+
+# --- world / server data ---
+data/
+plugins/
+
+# --- backups ---
+backups/
+
+# --- misc ---
+*.log
+*.tmp
+.DS_Store

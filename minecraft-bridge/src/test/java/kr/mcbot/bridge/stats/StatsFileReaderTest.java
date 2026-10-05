@@ -77,6 +77,24 @@ class StatsFileReaderTest {
     }
 
     @Test
+    void readsDeathCount() throws IOException {
+        Path file = write("deaths.json", """
+                {"stats":{"minecraft:custom":{"minecraft:deaths": 7, "minecraft:play_time": 20}}}
+                """);
+        assertEquals(7L, StatsFileReader.readDeaths(file));
+    }
+
+    @Test
+    void missingDeathCountIsNotFound() throws IOException {
+        Path file = write("nodeaths.json", """
+                {"stats":{"minecraft:custom":{"minecraft:play_time": 20}}}
+                """);
+        assertEquals(StatsFileReader.NOT_FOUND, StatsFileReader.readDeaths(file));
+        assertEquals(StatsFileReader.NOT_FOUND, StatsFileReader.readDeaths(tempDir.resolve("nope.json")));
+        assertEquals(StatsFileReader.NOT_FOUND, StatsFileReader.readDeaths(null));
+    }
+
+    @Test
     void ticksToSecondsClampsNegativesAndUses20Ticks() {
         assertEquals(0L, StatsFileReader.ticksToSeconds(0));
         assertEquals(0L, StatsFileReader.ticksToSeconds(-5));

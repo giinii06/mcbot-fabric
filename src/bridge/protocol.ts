@@ -47,6 +47,8 @@ export const deathEventSchema = z.object({
   message: z.string().max(500).nullish(),
   cause: z.string().max(64).nullish(),
   killer: z.string().max(64).nullish(),
+  /** Total deaths including this one ("n-th death" line). */
+  deathCount: z.number().int().min(0).max(10_000_000).nullish(),
 });
 
 export const advancementEventSchema = z.object({

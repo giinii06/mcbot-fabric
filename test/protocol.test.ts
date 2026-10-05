@@ -171,3 +171,13 @@ describe("statusEventSchema and whitelistEntrySchema", () => {
     expect(whitelistEntrySchema.safeParse({ uuid: PLAYER.uuid, name: "" }).success).toBe(false);
   });
 });
+
+describe("deathCount", () => {
+  test("carries the n-th death number and is bounded", () => {
+    const payload = { ...base, type: "player.death", player: PLAYER, cause: "drowning", deathCount: 4 };
+    expect(inboundEventSchema.parse(payload)).toMatchObject({ deathCount: 4 });
+    expect(inboundEventSchema.safeParse({ ...payload, deathCount: -1 }).success).toBe(false);
+    expect(inboundEventSchema.safeParse({ ...payload, deathCount: 1.5 }).success).toBe(false);
+    expect(inboundEventSchema.safeParse({ ...payload, deathCount: "4" }).success).toBe(false);
+  });
+});

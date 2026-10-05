@@ -3,7 +3,6 @@ import { z } from "zod";
 export const envSchema = z.object({
   DISCORD_TOKEN: z.string().min(1).optional(),
   DISCORD_APPLICATION_ID: z.string().regex(/^\d+$/, "snowflake").optional(),
-  MINECRAFT_GUILD_ID: z.string().regex(/^\d+$/, "snowflake").optional(),
   MC_BRIDGE_SECRET: z.string().min(16, "MC_BRIDGE_SECRET must be at least 16 chars"),
   MC_BRIDGE_BASE_URL: z.string().min(1).default("http://minecraft:8765"),
   MC_BOT_PORT: z.coerce.number().int().min(1).max(65535).default(47865),

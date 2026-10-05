@@ -100,7 +100,15 @@ describe("IdentityService.resolve", () => {
     const { svc } = service((url) => (url.includes("mojang") ? jsonResponse({}, 404) : jsonResponse({}, 503)));
     const result = await svc.resolve("Nobody");
     expect(result.status).toBe("NONE");
+    expect(result.bedrockCacheMiss).toBe(true);
     expect(svc.candidates(result)).toEqual([]);
+  });
+
+  test("does not flag a cache miss when geyser has no entry at all", async () => {
+    const { svc } = service((url) => (url.includes("mojang") ? jsonResponse({}, 404) : jsonResponse({}, 404)));
+    const result = await svc.resolve("Nobody");
+    expect(result.status).toBe("NONE");
+    expect(result.bedrockCacheMiss).toBeFalsy();
   });
 
   test("an api failure becomes a user facing error", async () => {
