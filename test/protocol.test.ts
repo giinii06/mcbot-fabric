@@ -42,6 +42,7 @@ describe("inboundEventSchema", () => {
     const events = [
       { ...base, type: "player.join", player: PLAYER },
       { ...base, type: "player.quit", player: PLAYER, reason: "DISCONNECTED" },
+      { ...base, type: "player.chat", player: PLAYER, message: "안녕! x=123, y=64" },
       {
         ...base,
         type: "player.death",
@@ -65,6 +66,7 @@ describe("inboundEventSchema", () => {
   });
 
   test("rejects unknown types and malformed payloads", () => {
+    expect(inboundEventSchema.safeParse({ ...base, type: "unknown.event", player: PLAYER }).success).toBe(false);
     expect(inboundEventSchema.safeParse({ ...base, type: "player.chat", player: PLAYER }).success).toBe(false);
     expect(inboundEventSchema.safeParse({ ...base, type: "player.join" }).success).toBe(false);
     expect(inboundEventSchema.safeParse({ ...base, type: "player.join", player: PLAYER, ts: -1 }).success).toBe(false);
@@ -73,6 +75,13 @@ describe("inboundEventSchema", () => {
       inboundEventSchema.safeParse({ ...base, type: "server.status", status: "restarting", online: 0, max: 20 })
         .success,
     ).toBe(false);
+  });
+
+  test("rejects empty and oversized chat messages", () => {
+    for (const message of ["", "   ", "a".repeat(1025), null]) {
+      expect(inboundEventSchema.safeParse({ ...base, type: "player.chat", player: PLAYER, message }).success).toBe(false);
+    }
+    expect(inboundEventSchema.safeParse({ ...base, type: "player.chat", player: PLAYER, message: "a".repeat(1024) }).success).toBe(true);
   });
 
   test("the death payload has no coordinate or world fields", () => {

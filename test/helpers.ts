@@ -121,8 +121,8 @@ export function createTestServices(options: TestServicesOptions = {}): TestServi
     get: () => null,
     set: () => undefined,
     clear: () => undefined,
-    async send(guildId, embeds) {
-      sent.push({ guildId, embeds: embeds.length });
+    async send(guildId, message) {
+      sent.push({ guildId, embeds: typeof message === "string" ? 0 : message.length });
       return true;
     },
     guildsWithChannel: () => repos.listConfiguredLogGuilds(),

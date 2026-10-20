@@ -2,6 +2,10 @@ import { EmbedBuilder } from "discord.js";
 import { formatDuration } from "../core/duration";
 import { truncate, type DiscordDisplaySource } from "../core/user";
 import type { PlayerRef, Edition } from "../bridge/protocol";
+import advancementsKo from "./advancements.ko.json";
+
+// Official Minecraft 26.3 ko_kr translations, indexed by advancement ID.
+const KOREAN_ADVANCEMENTS: Record<string, { title: string; description: string }> = advancementsKo;
 
 export const EMBED_COLORS = {
   JOIN: 0x57f287,
@@ -126,13 +130,11 @@ export function advancementEmbed(
   discord: DiscordDisplaySource | null,
   advancement: { key: string; title: string; description?: string | null },
 ): EmbedBuilder {
-  const embed = base(EMBED_COLORS.ADVANCEMENT)
+  const localized = Object.hasOwn(KOREAN_ADVANCEMENTS, advancement.key)
+    ? KOREAN_ADVANCEMENTS[advancement.key]! : advancement;
+  return base(EMBED_COLORS.ADVANCEMENT)
     .setDescription(`**${playerLabel(discord, player.username)}** 님이 도전과제를 달성했습니다.`)
-    .addFields({ name: "도전과제", value: truncate(advancement.title, 256) });
-
-  const description = advancement.description?.trim();
-  if (description) embed.addFields({ name: "설명", value: truncate(description, 1024) });
-  return embed;
+    .addFields({ name: "도전과제", value: truncate(localized.title, 256) });
 }
 
 export function statusEmbed(

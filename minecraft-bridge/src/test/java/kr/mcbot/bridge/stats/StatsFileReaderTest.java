@@ -16,6 +16,18 @@ class StatsFileReaderTest {
     @TempDir
     Path tempDir;
 
+    @Test
+    void readsMigratedStatsInsteadOfStaleLegacyStats() throws IOException {
+        Path legacy = Files.createDirectories(tempDir.resolve("stats"));
+        Files.writeString(legacy.resolve("player.json"), "{\"minecraft:play_time\":20}");
+        assertEquals(20L, StatsFileReader.readTicks(StatsFileReader.statsDirectory(tempDir).resolve("player.json")));
+        Path modern = Files.createDirectories(tempDir.resolve("players/stats"));
+        Files.writeString(modern.resolve("player.json"), "{\"minecraft:play_time\":1200,\"minecraft:deaths\":7}");
+        Path stats = StatsFileReader.statsDirectory(tempDir).resolve("player.json");
+        assertEquals(1200L, StatsFileReader.readTicks(stats));
+        assertEquals(7L, StatsFileReader.readDeaths(stats));
+    }
+
     private Path write(String name, String content) throws IOException {
         Path file = tempDir.resolve(name);
         Files.writeString(file, content);

@@ -38,6 +38,14 @@ export const quitEventSchema = z.object({
   reason: z.string().max(64).nullish(),
 });
 
+export const chatEventSchema = z.object({
+  eventId: eventIdSchema,
+  type: z.literal("player.chat"),
+  ts: tsSchema,
+  player: playerRefSchema,
+  message: z.string().trim().min(1).max(1024),
+});
+
 export const deathEventSchema = z.object({
   eventId: eventIdSchema,
   type: z.literal("player.death"),
@@ -77,6 +85,7 @@ export const statusEventSchema = z.object({
 export const inboundEventSchema = z.discriminatedUnion("type", [
   joinEventSchema,
   quitEventSchema,
+  chatEventSchema,
   deathEventSchema,
   advancementEventSchema,
   statusEventSchema,

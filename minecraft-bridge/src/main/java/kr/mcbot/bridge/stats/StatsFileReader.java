@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Read-only reader for `<world>/stats/<uuid>.json`.
+ * Read-only reader for player statistics (26.1+: `<world>/players/stats/`).
  * Vanilla 1.21.11 stores play time under `stats.minecraft:custom.minecraft:play_time`
  * (in ticks); older files may still carry `minecraft:play_one_minute`.
  */
@@ -22,6 +22,12 @@ public final class StatsFileReader {
     public static final long NOT_FOUND = -1L;
 
     private StatsFileReader() {
+    }
+
+    public static Path statsDirectory(Path worldRoot) {
+        // 26.1 moves player storage; the players folder exists before the first login.
+        return Files.isDirectory(worldRoot.resolve("players"))
+                ? worldRoot.resolve("players/stats") : worldRoot.resolve("stats");
     }
 
     public static boolean exists(Path statsFile) {

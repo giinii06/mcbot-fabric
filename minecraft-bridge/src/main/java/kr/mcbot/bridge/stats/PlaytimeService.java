@@ -14,7 +14,7 @@ import java.util.logging.Logger;
  * Playtime source.
  *
  * Online players  -> Bukkit statistic (snapshot refreshed on the main thread)
- * Offline players -> `<world>/stats/<uuid>.json`, read only, never on the main thread
+ * Offline players -> player stats JSON, read only, never on the main thread
  *
  * Both paths read the same underlying value which vanilla stores in ticks
  * (20 ticks = 1 second), so the two sources never disagree in unit.

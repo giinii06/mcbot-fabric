@@ -1,19 +1,24 @@
-import { Routes } from "discord.js";
+import { MessageFlags, Routes } from "discord.js";
 import { REST } from "discord.js";
 import type { EmbedBuilder } from "discord.js";
 import type { Repositories } from "../db/repositories";
 import type { Logger } from "../log";
 
 export interface ChannelSender {
-  send(channelId: string, embeds: EmbedBuilder[]): Promise<void>;
+  send(channelId: string, message: string | EmbedBuilder[]): Promise<void>;
 }
 
 export function createDiscordSender(token: string): ChannelSender {
   const rest = new REST({ version: "10" }).setToken(token);
   return {
-    async send(channelId, embeds) {
+    async send(channelId, message) {
       await rest.post(Routes.channelMessages(channelId), {
-        body: { embeds: embeds.map((e) => e.toJSON()) },
+        body: {
+          ...(typeof message === "string"
+            ? { content: message, flags: MessageFlags.SuppressEmbeds }
+            : { embeds: message.map((e) => e.toJSON()) }),
+          allowed_mentions: { parse: [] },
+        },
       });
     },
   };
@@ -24,7 +29,7 @@ export interface LogChannelService {
   set(guildId: string, channelId: string): void;
   clear(guildId: string): void;
   /** Sends to the guild log channel. Returns false when delivery failed. */
-  send(guildId: string, embeds: EmbedBuilder[]): Promise<boolean>;
+  send(guildId: string, message: string | EmbedBuilder[]): Promise<boolean>;
   /** Every guild that currently has a log channel configured. */
   guildsWithChannel(): string[];
 }
@@ -50,11 +55,11 @@ export function createLogChannelService(deps: {
       deps.repos.clearLogChannel(guildId);
     },
 
-    async send(guildId, embeds) {
+    async send(guildId, message) {
       const channelId = deps.repos.getLogChannel(guildId)?.channelId;
       if (!channelId) return false;
       try {
-        await deps.sender.send(channelId, embeds);
+        await deps.sender.send(channelId, message);
         return true;
       } catch (err) {
         deps.log.warn("failed to deliver log message", {

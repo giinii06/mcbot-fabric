@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PlayerRef } from "../src/bridge/protocol";
 import type { DiscordDisplaySource } from "../src/core/user";
-import { deathEmbed, deathLine, joinEmbed, quitEmbed, statusEmbed } from "../src/minecraft/embeds";
+import { advancementEmbed, deathEmbed, deathLine, joinEmbed, quitEmbed, statusEmbed } from "../src/minecraft/embeds";
 
 const PLAYER: PlayerRef = {
   uuid: "f642a5e3-d12f-4a7d-9c96-aef87fcf92be",
@@ -21,6 +21,30 @@ const DEATH = {
   cause: null as string | null,
   ts: 1_700_000_000_000,
 };
+
+describe("advancementEmbed", () => {
+  test("uses the official Korean title and hides the advancement description", () => {
+    const embed = advancementEmbed(PLAYER, DISCORD, {
+      key: "minecraft:story/mine_diamond", title: "Diamonds!", description: "Acquire diamonds",
+    }).toJSON();
+    expect(embed.description).toBe("**기니 (giinii77)** 님이 도전과제를 달성했습니다.");
+    expect(embed.fields).toEqual([
+      { name: "도전과제", value: "다이아몬드다!" },
+    ]);
+  });
+
+  test("matches IDs rather than English names and keeps custom advancement titles", () => {
+    expect(advancementEmbed(PLAYER, null, {
+      key: "minecraft:story/mine_diamond", title: "advancements.story.mine_diamond.title",
+    }).data.fields?.[0]?.value).toBe("다이아몬드다!");
+    for (const key of ["custom:story/mine_diamond", "__proto__"]) {
+      const fields = advancementEmbed(PLAYER, null, { key, title: "우리 서버 도전과제", description: "직접 만든 설명" }).data.fields;
+      expect(fields).toEqual([
+        { name: "도전과제", value: "우리 서버 도전과제" },
+      ]);
+    }
+  });
+});
 
 describe("joinEmbed", () => {
   test("is one line only - no title, no 플랫폼 field, no timestamp", () => {

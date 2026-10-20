@@ -1,186 +1,182 @@
-# server/ — Minecraft Java + Bedrock 크로스플레이 서버 (단독 호스팅 가능)
+# Oracle ARM64 Paper 생존 서버
 
-Leaf 1.21.11 + Geyser/Floodgate(Bedrock) + ViaVersion(구버전 호환) + Chunky(사전 생성) +
-mc-backup(6시간 주기) 구성을 Docker로 돌립니다.
+2 OCPU / 12GB 호스트용 Java 전용 10인 서버입니다. Paper **26.3 #205 STABLE**과
+`itzg/minecraft-server:java25`(ARM64 지원)를 사용합니다. 게임 버전과 빌드는 고정되며 자동으로 올리지 않습니다.
+공식 출처: [Paper API](https://fill.papermc.io/v3/projects/paper/versions/26.3/builds/205),
+[Java 요구사항](https://docs.papermc.io/paper/getting-started/),
+[itzg 설정](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/server-types/paper/).
 
-**이 폴더만 통째로 다른 호스트에 복사해도 그대로 기동됩니다.**
-봇과 함께 쓰는 전체 스택 이전 절차는 리포 루트 `README.md`의
-"새 호스트로 통째로 옮기기" 절을 보세요.
+## 구성과 설치
 
-```
-server/
-├── compose.yaml   게임 서버(minecraft) + 백업 사이드카(minecraft-backup)
-├── .env.example   버전·URL·자원 템플릿 (시크릿 없음, 복제 후 .env로 복사)
-├── install.sh     설치/재설정 (멱등, 월드·설정·화이트리스트를 덮어쓰지 않음)
-├── mc.sh          실행·관리·검증 스크립트
-├── .gitignore     data/ backups/ secrets/ .env 제외
-├── data/          (실행 후 생성, git 제외) 월드·server.properties·플러그인
-├── backups/       (실행 후 생성, git 제외) world_*.tar.zst
-└── secrets/       (실행 후 생성, git 제외) rcon_password (600)
-```
-
-## 1. 요구사항
-
-| 항목 | 값 |
-|---|---|
-| OS/아키텍처 | Ubuntu 22.04+ , `aarch64`/`arm64`/`x86_64` (Java라 아키 무관) |
-| CPU/RAM | 최소 2 vCPU / 4 GB 권장 (검증 환경: 2 OCPU / 12 GB). 게임 5g·1.75cpu + 백업 1g·0.5cpu 상한 |
-| 디스크 | 여유 3 GB+ (월드+백업, `./mc.sh check`가 2 GB 미만이면 FAIL) |
-| Docker | Engine 24+ + compose v2 (`docker compose version` 확인) |
-| 포트 | TCP 25565 (Java), UDP 19132 (Bedrock). UFW가 active일 때만 자동 추가, 비활성이면 건드리지 않음 |
-| 클라우드 방화벽 | OCI Security List/NSG, AWS SG 등에서 ingress 직접 개방 (아래 참조) |
-
-```
-TCP 25565  0.0.0.0/0   (Java 클라이언트)
-UDP 19132  0.0.0.0/0   (Bedrock 클라이언트)
-```
-
-접속 주소 (공개 IP 기준): Java `공개IP:25565`, Bedrock `공개IP:19132` (UDP, 게임 내 "서버 추가").
-
-## 2. 설치 (신규 호스트, 3줄)
+`server/`가 설치 경로이며 `data/`는 모든 월드·설정·플러그인, `backups/`는 압축 백업,
+`secrets/rcon_password`는 RCON 비밀번호(600)입니다. `.env`도 600으로 보관합니다.
+Docker Engine + Compose, curl, openssl, bash가 필요합니다. Docker 데몬은 부팅 시 실행되어야 합니다
+(`systemctl is-enabled docker`; 필요하면 `sudo systemctl enable --now docker`).
 
 ```bash
 cd server
-cp .env.example .env && chmod 600 .env
-# .env의 MC_UID/MC_GID를 본인 id에 맞춤 (install.sh가 첫 생성 시 자동 설정하지만,
-# .env.example을 직접 복사했다면 수동 확인):  id -u ; id -g
-./install.sh          # 설치/재설정 + 서버 기동 (첫 부팅은 Leaf 다운로드+월드 생성으로 수 분 소요)
-./mc.sh check         # 전수 검증 — 반드시 ALL CHECKS PASSED 확인
-```
-
-`install.sh`가 하는 일 (멱등, 재실행 안전):
-
-1. 아키텍처·Docker·포트(25565/tcp, 19132/udp) 점검. 사용 중인데 `minecraft` 컨테이너가 아니면 중단 (기존 프로세스를 죽이지 않음).
-2. 외부 네트워크 `mc-discord` 생성 (없으면). 봇 없이 서버만 써도 해가 없고, 나중에 봇을 붙일 때 그대로 재사용.
-3. `data/` `backups/` `secrets/` 생성 (`secrets`는 700).
-4. `secrets/rcon_password` 생성 (없을 때만, `openssl rand -hex 24`, 600). compose·`.env`에는 평문을 두지 않고 파일 마운트만 사용.
-5. `.env` 준비 (없으면 `.env.example` 복사 후 `MC_UID/MC_GID`를 `id -u/id -g`로 자동 설정, 600. 있으면 누락 키만 추가, 기존 값 유지).
-6. `compose.yaml` 문법 검증 (`docker compose config -q`).
-7. Leaf JAR sha256 대조 (불일치 시 재다운로드용 삭제, 일치는 유지).
-8. 이미지 pull (`itzg/minecraft-server:java21`, `itzg/mc-backup`).
-9. UFW가 active일 때만 `25565/tcp`·`19132/udp` allow. 비활성이면 활성화하지 않음 (클라우드 콘솔에서 직접 개방).
-10. `docker compose up -d` + `Done (...)!` 부팅 대기 (최대 900초). 이미 실행 중이면 대기 생략.
-
-이미 월드가 있는 호스트에서 재실행해도 `data/world*`·`server.properties`·플러그인·Floodgate `key.pem`·ops·whitelist를 덮어쓰지 않습니다.
-
-## 3. `.env` 항목표 (전부 고정값, "latest" 금지)
-
-| 키 | 예시 | 설명 |
-|---|---|---|
-| `MC_VERSION` / `LEAF_BUILD` | `1.21.11` / `179` | 서버 구현체 버전. 플러그인 호환과 세트이므로 임의 변경 금지 |
-| `LEAF_JAR_URL` / `LEAF_SHA256` | (고정 URL) | Leaf 다운로드 주소와 sha256. `install.sh`·`mc.sh check`가 검증 |
-| `GEYSER_URL`/`GEYSER_SHA256` | 2.11.3/b1247 | Bedrock 접속용. 공식 geysermc download API |
-| `FLOODGATE_URL`/`FLOODGATE_SHA256` | 2.2.5/b141 | Bedrock 인증용. Bedrock 계정 없이 입장 가능 (`auth-type=floodgate`) |
-| `VIAVERSION_URL`/`VIAVERSION_SHA256` | 5.12.0 | 구버전 클라이언트 호환 (Hangar) |
-| `CHUNKY_URL`/`CHUNKY_SHA256` | 1.4.40 | 월드 사전 생성 (Hangar, Modrinth 호환 확인 후 선정) |
-| `JVM_INIT_MEMORY`/`JVM_MAX_MEMORY` | `1G`/`4G` | `-Xms1G -Xmx4G`. Java 21 기본 G1GC, Aikar/MeowIce 플래그 미사용 |
-| `MC_UID`/`MC_GID` | `id -u`/`id -g` | 호스트 유저 매핑 (`./data` 소유권 유지) |
-| `TZ` | `Asia/Seoul` | 로그·백업 파일 시각 |
-| `JAVA_PORT`/`BEDROCK_PORT` | `25565`/`19132` | 바꾸면 방화벽 규칙도 같이 변경 |
-| `BACKUP_INTERVAL` | `6h` | 정기 백업 주기 (백업 컨테이너가 수행, 7일 초과분 자동 삭제) |
-| `BACKUP_RETENTION_DAYS` | `7` | 보관 일수 |
-| `BACKUP_COMPRESS_ARGS` | `-3 -T1` | zstd 압축 강도·스레드 |
-| `BACKUP_EXCLUDES` | (고정) | jar·캐시·로그 제외 → 월드·설정·플러그인 설정만 백업 |
-
-플러그인 올리기: `./mc.sh update-plugins --dry-run` (조회+다운로드+검증만) →
-`./mc.sh update-plugins` (백업→`.env` 갱신→재시작→로드 확인).
-공식 API에서 최신 조회 후 sha256+`plugin.yml` 검증, **MC 1.21.11 호환 목록에 없으면 중단**합니다.
-
-## 4. 관리 명령 (`mc.sh`)
-
-```bash
-./mc.sh status            # 컨테이너/포트/자원/백업/플레이어 요약
-./mc.sh logs [N] [-f]     # 로그 N줄 (기본 150), -f 실시간 follow
-./mc.sh console           # 서버 콘솔 접속 (TTY 필요, 나가기: Ctrl-P Ctrl-Q, Ctrl-C 금지)
-./mc.sh start|stop|restart
-./mc.sh players           # 온라인 + OP 목록
-./mc.sh tps               # Leaf 내장 /tps (fallback: spark tps)
-./mc.sh mspt              # Leaf 내장 /mspt (fallback: spark tick durations)
-./mc.sh backup            # 즉시 백업 (정기 백업과 동일 방식)
-./mc.sh update-plugins [--dry-run]
-./mc.sh check             # 전수 검증 (배포·복원·이전 후 필수)
-```
-
-월드 사전 생성 (선택, 접속 없이도 가능. 실행 중 CPU 점유):
-
-```bash
-./mc.sh pregen-overworld   # world 5000블록 반경
-./mc.sh pregen-nether      # world_nether 2000
-./mc.sh pregen-end         # world_the_end 2000
-./mc.sh pregen-status      # 진행률/속도/ETA
-./mc.sh pregen-pause|pregen-continue
-./mc.sh pregen-cancel      # 취소 (chunky cancel + confirm)
-```
-
-실측 (2 OCPU): 약 6~14 cps, 실행 중 TPS 19.1~20.0. 사전 생성 없이도 접속 가능 (첫 접속 시 청크 생성).
-
-## 5. 핵심 설정값 (제약 조건, 바꾸기 전 README 루트 "설계 판단" 참조)
-
-| 항목 | 값 | 이유 |
-|---|---|---|
-| 게임 `mem_limit`/`cpus` | 5g / 1.75 | 12 GB·2 OCPU 중 일부만 사용 (다른 서비스 보호). RAM이 아니라 **CPU가 병목** |
-| 백업 `mem_limit`/`cpus` | 1g / 0.5 | 게임 서버와 CPU 경쟁 방지 |
-| `online-mode` | `true` | 오프라인 인증 금지 (Bedrock은 Floodgate가 처리) |
-| `view-distance`/`simulation-distance` | 7 / 4 | 2 OCPU 기본값 |
-| `pause-when-empty-seconds` | 60 | 빈 서버 60초 후 월드 틱 일시정지 |
-| GC | 기본 G1GC | Aikar/MeowIce/Shenandoah 플래그 미사용 |
-| Spark | Leaf 번들 | 별도 설치 금지 |
-| 화이트리스트 | `ENABLE_WHITELIST=true` | 봇 연동 시 봇이 관리. 단독 운용이면 `whitelist add <name>` 콘솔 명령으로 수동 관리 |
-
-`data/server.properties`·`data/config/` 직접 조정은 `restart` 후 유지, `install.sh`는 초기화하지 않음.
-
-## 6. 검증 (`./mc.sh check`가 보는 것)
-
-아키텍처·CPU·디스크 → 구성 파일 문법·권한 → 시크릿 분리(RCON 평문 없음) →
-컨테이너 자원 한도(5g/1.75cpu) → JVM `-Xms1G/-Xmx4G` → 포트 리스닝·TCP 연결 →
-**양쪽 엔드포인트 실응답**(Java status ping = Leaf 1.21.11/protocol 774,
-Bedrock RakNet Pong = MCPE, port 19132) → `server.properties` →
-Leaf JAR sha256 → 플러그인 4종 로드 + Floodgate `key.pem` →
-Geyser `auth-type=floodgate`/`show-coordinates=true`/`clone-remote-port=false`/`debug-mode=false` →
-`gamerule keep_inventory=true` → 최근 500줄 오류 스캔 → 백업 파일 존재.
-
-> MC 1.21.11의 gamerule 키는 snake_case: `gamerule keep_inventory true`
-> (`keepInventory` 아님. 실행 결과 `Gamerule keep_inventory is now set to: true`).
-
-## 7. 백업·복원
-
-백업은 **`/data` 기준 상대경로**(`./world`, `./plugins`, `./server.properties` …)로 담고
-`*.jar`/`versions`/`libraries`/`logs`/`cache`는 제외 → 월드·설정·플러그인 설정만 복원,
-실행 파일은 재다운로드. 정기 백업은 `minecraft-backup` 컨테이너가 6시간 주기로 수행.
-
-```bash
-./mc.sh stop
-mv data data.bak-$(date +%Y%m%d-%H%M%S)   # 기존 데이터는 절대 삭제하지 않음
-mkdir data
-tar --use-compress-program=unzstd -xf backups/world-YYYYMMDD-HHMMSS.tar.zst -C data
-./install.sh
+./install.sh --no-start  # 호스트 검사, UID/GID 설정, 시크릿 생성, 해시 검증, 이미지 준비
+./mc.sh start
+./mc.sh logs -f         # Done (...)! 및 healthy 확인
 ./mc.sh check
 ```
 
-Floodgate/Geyser `key.pem`은 백업에 포함 → 복원 후 Bedrock 계정 매핑 유지.
+기존 `.env`와 월드는 덮어쓰지 않습니다. 구 Leaf `.env` 또는 기존 server.properties가 있으면
+설치기는 자동 업그레이드를 중단합니다. 아래 이전 절차를 먼저 수행하세요.
+Docker가 없을 때 임의 원격 설치 스크립트를 실행하지 않으며 공식 설치 주소를 안내합니다.
+`--no-start`도 파일 생성·이미지 다운로드를 수행하지만 게임은 시작하지 않습니다.
 
-## 8. Discord 봇과 함께 쓰기 (요약, 상세는 루트 README)
-
-1. `docker network inspect mc-discord`에 `minecraft`·`mcbot` 둘 다 있는지 확인
-   (`install.sh`가 서버 쪽을, 루트 `docker compose up`이 봇 쪽을 붙임).
-2. 플러그인 빌드·배포 (리포 루트에서):
-   ```bash
-   bun run minecraft:build-plugin
-   cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
-   ```
-3. `server/data/plugins/MinecraftBridge/config.yml`의 `secret`과 봇 `.env`의
-   `MC_BRIDGE_SECRET`을 같은 값으로 (어느 쪽에도 커밋·로그 금지, 600 권장).
-   플러그인 포트 `:8765`는 호스트 미게시, 봇은 `mcbot:47865`로 호출.
-4. `ENABLE_WHITELIST=true` 유지, `WHITELIST` 목록 환경변수는 설정하지 않음 (봇이 DB↔파일 동기화).
-
-## 9. Troubleshooting
-
-| 증상 | 확인 |
+| 설정 | 기본값 |
 |---|---|
-| `Done (...)!` 후에도 접속 불가 | 클라우드 ingress 누락이 대부분 (TCP 25565 + UDP 19132) → `./mc.sh status` 포트 섹션 |
-| Bedrock 로그인 실패 | `data/plugins/Geyser-Spigot/config.yml`의 `auth-type: floodgate` 확인 후 `./mc.sh restart` |
-| OOM 종료 | `docker inspect minecraft \| grep OOMKilled`. Java 21은 힙 소진 시 `ExitOnOutOfMemoryError`로 빠르게 재시작 |
-| 포트 충돌 | `./mc.sh status` 포트 섹션. 기존 컨테이너는 종료하지 않음 (수동 정리) |
-| `check`에서 RCON 평문 FAIL | `compose.yaml`·`.env`에 `RCON_PASSWORD=` 평문을 넣었는지 확인 → 파일 마운트(`secrets/rcon_password`)만 사용 |
-| `check`에서 아키텍처 FAIL | `uname -m`이 aarch64/arm64/x86_64인지 확인 (라즈베리·WSL·클라우드 모두 통과) |
-| `gamerule keepInventory` 실패 | 1.21.11은 `keep_inventory` (snake_case) |
+| 힙 / 컨테이너 메모리 | Xms 2G / Xmx 6G / 게임 8g |
+| CPU | 게임 상한 2.0, 백업 0.25·낮은 CPU shares |
+| 백업 메모리 | 512m |
+| 게임 | survival, peaceful(고정), PvP 켬, 10명 |
+| 인증·접속 제한 | online-mode, white-list, enforce-whitelist 모두 true |
+| 시야 / 시뮬레이션 | 6 / 4 |
+| GC | Java 25 기본 G1, Aikar/MeowIce 플래그 없음 |
+| 공개 포트 | TCP 25565만; RCON 25575·브릿지 8765는 호스트 미게시 |
+
+게임과 백업·봇은 같은 2 OCPU를 공유합니다. CPU 상한 합계는 예약량이 아니며,
+동시 부하에서는 서로 경쟁합니다. 다른 상주 서비스가 있으면 메모리 여유를 계속 확인하세요.
+Paper 기본 chunk workers, 엔티티 활성·추적 범위, 몹 스폰, 호퍼, 주민 AI, 레드스톤,
+자동저장·네트워크 설정을 임의 변경하지 않습니다. 빈 서버 틱 정지는 끄고 백업 RCON 응답을 유지합니다.
+Paper 자체의 바닐라 차이는 남아 있으며 완전히 동일한 엔진은 아닙니다.
+
+## TypeScript Discord 봇 연결
+
+기존 `/ops`, `/bridge/events`, 공유 시크릿 인증을 그대로 사용합니다.
+26.1+의 `world/players/stats/` 경로를 사용하며 이전 버전의 `world/stats/` 조회도 지원합니다.
+브릿지는 인원 제한·keepInventory를 강제하지 않고 서버 설정과 기존 월드 규칙을 따릅니다.
+신규 월드는 기본 생존 규칙을 사용하며 기존 월드의 keepInventory 값은 자동 변경하지 않습니다.
+
+리포 루트에서:
+
+```bash
+bun install --frozen-lockfile
+bun run minecraft:build-plugin
+mkdir -p server/data/plugins
+cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
+```
+
+1. 루트 `.env.example`을 `.env`로 복사하고 Discord 토큰·애플리케이션 ID를 입력합니다.
+2. `openssl rand -hex 32`로 공유 시크릿을 만들어 루트 `.env`의 `MC_BRIDGE_SECRET`과
+   `data/plugins/MinecraftBridge/config.yml`의 `bot.secret`에 동일하게 설정합니다.
+   플러그인 설정 템플릿은 `minecraft-bridge/src/main/resources/config.yml`입니다.
+   값은 커밋·출력하지 말고 두 설정 파일의 권한을 600으로 유지합니다.
+3. `bot.base-url: http://mcbot:47865`, `MC_BRIDGE_BASE_URL=http://minecraft:8765`,
+   `server.bind: 0.0.0.0`를 유지합니다. 양쪽 Compose는 `mc-discord` 네트워크를 공유합니다.
+4. `cd server && ./mc.sh restart`, 루트에서 `docker compose up -d --build` 실행.
+5. `curl -fsS http://127.0.0.1:47865/health`의 `minecraft:true` 확인.
+
+봇이 화이트리스트를 관리하므로 `WHITELIST` 목록 환경변수를 추가하지 마세요.
+Discord에서 `/유저등록`을 사용합니다.
+봇 없이 운영할 때만 `./mc.sh command whitelist add Java이름`으로 추가합니다.
+Geyser/Floodgate/ViaVersion과 Bedrock UDP 포트는 이 호스팅 구성에 포함하지 않습니다.
+봇의 Bedrock 기능은 소스에 남아 있지만 이 Java 전용 서버에서는 사용하지 않습니다.
+
+## 운영·성능 측정
+
+```bash
+./mc.sh start
+./mc.sh stop                 # 백업 먼저 정지, save-all flush, 정상 종료(120초 유예)
+./mc.sh restart
+./mc.sh status               # 자원·디스크·컨테이너 상태
+./mc.sh logs -f              # 게임 + 백업 로그
+./mc.sh players
+./mc.sh tps
+./mc.sh mspt
+./mc.sh command spark healthreport
+./mc.sh command spark profiler start --timeout 120
+```
+
+`restart: unless-stopped`로 오류 종료와 Docker 재부팅 후 재시작합니다. 수동으로 정지한
+서버는 재부팅해도 정지 상태를 유지합니다. healthcheck 실패만으로 자동 재시작하지는 않습니다.
+Spark는 Paper 내장 기능을 사용합니다. 프로파일 링크에는 서버 정보가 포함될 수 있습니다.
+실제 접속 중 평균·95백분위 MSPT, GC 정지, CPU·힙, 청크 생성, 엔티티·블록 엔티티를 확인하세요.
+20 TPS 예산은 틱당 50ms입니다. 95백분위가 이를 자주 넘으면 프로파일의 상위 작업부터 확인합니다.
+10명 실접속 시험 전에는 20 TPS 보장을 주장할 수 없습니다. 신규 청크 탐험·몹팜·주민이 예상 CPU 병목입니다.
+
+## 선택적 사전 생성
+
+[Chunky 1.5.3](https://modrinth.com/plugin/chunky/version/MdY6JATr)은 Paper 26.3 호환 release로 확인했고
+URL·SHA256을 고정했습니다. 필요할 때만 설치합니다. 월드명은 기본 `world` 기준입니다.
+
+```bash
+./mc.sh install-chunky
+./mc.sh restart
+./mc.sh pregen-overworld      # 원형 반경 2000, 중심 0,0
+./mc.sh pregen-status
+./mc.sh pregen-pause
+./mc.sh pregen-continue
+# 오버월드 완료 후 별도로 실행
+./mc.sh pregen-nether         # 원형 반경 1000
+```
+
+26.1+는 `world/dimensions/minecraft/{overworld,the_nether,the_end}`에 차원을 저장합니다.
+Chunky에서는 Bukkit 월드 이름을 사용합니다. `./mc.sh command chunky world`로 실제 이름을 확인하세요.
+시작 시 플레이어 0명·디스크 여유 10GiB 이상을 검사합니다. 진행 중에는 접속을 제한하고
+상태를 관찰하세요. 사람이 들어오거나 MSPT가 오르면 `pregen-pause`로 중단합니다.
+모든 월드를 동시에 생성하지 않으며 엔드는 필요할 때 수동으로 선택합니다.
+
+## 백업과 복구
+
+첫 부팅 후 3분 뒤, 그 뒤 **24시간 간격**으로 zstd 단일 스레드 압축 백업을 만듭니다.
+실행 기준 간격이므로 고정 시각 예약은 아닙니다. 7일 보관하며 하루 이상 서비스가 중단되면
+그 기간 백업은 생성되지 않습니다. 저장 공간은 원본 크기 + 1GiB 이상을 요구합니다.
+RCON으로 `save-off` → `save-all flush` → 압축 → `save-on`을 수행합니다.
+쓰기 재개 후 전체 아카이브를 읽어 무결성을 검증하고 실패하면 로그·비정상 종료로 알립니다.
+강제 종료 중 백업 실패 시 `./mc.sh command save-on`을 확인하세요.
+압축 중에도 틱은 진행하지만 저장 flush·디스크 읽기 부하는 남습니다.
+
+백업은 오버월드·네더·엔드, 서버·플러그인 설정, whitelist/ops를 포함합니다.
+JAR·로그·캐시·RCON CLI 인증 파일은 제외합니다. 설정을 수정하거나 화이트리스트를 동기화하는
+작업은 백업과 겹치지 않게 하세요. 엄격한 전체 파일 일관성이 필요한 이전에는 서버를 정지한 복사본도 보관하세요.
+브릿지 시크릿은 백업에 포함되므로 `backups/`를 비공개로 보관합니다.
+봇 SQLite·루트 `.env`·`server/.env`·RCON 시크릿은 게임 백업 밖이므로 별도로 안전하게 보관해야 합니다.
+
+```bash
+./mc.sh backup
+./mc.sh verify-backup backups/world-실제파일명.tar.zst
+./mc.sh logs -f minecraft-backup
+```
+
+복구는 먼저 파일 목록과 무결성을 확인한 **신뢰하는 백업**으로만 합니다.
+
+```bash
+./mc.sh verify-backup backups/world-실제파일명.tar.zst
+./mc.sh stop
+mv data "data.before-restore-$(date +%Y%m%d-%H%M%S)"
+mkdir data
+# 백업 이미지의 tar/zstd 사용, 게임 컨테이너는 시작하지 않음
+# 복원 파일 소유권 유지를 위해 .env의 MC_UID:MC_GID 숫자로 USER값을 교체
+# (예: --user 1001:1001)
+docker compose run --rm --no-deps --user 1001:1001 -v "$PWD/data:/restore" --entrypoint tar minecraft-backup \
+  --zstd -xf /backups/world-실제파일명.tar.zst -C /restore
+```
+
+백업 서비스의 `/data`는 읽기 전용이므로 별도의 `/restore` 마운트를 사용합니다. 복원 후 고정 Paper JAR 및 브릿지 JAR를 다시 배치하고
+`./mc.sh start`, `./mc.sh check`로 확인합니다. 기존 `data.before-restore-*`는 삭제하지 않습니다.
+별도 기존 스토리지로 복제할 수 있으나 새 OCI 볼륨·버킷은 자동 생성하지 않습니다.
+
+## 기존 Leaf 이전·업데이트
+
+기존 서버를 이 커밋으로 바꾸기 **전**, 구 스크립트로 백업·정지하고 data와 .env를 별도 복사합니다.
+신규 버전에서 열린 월드는 구 버전으로 안전하게 다운그레이드할 수 없습니다.
+
+1. `.env`를 보존한 뒤 `.env.example`의 Paper 버전·빌드·SHA256·메모리·백업 값으로 수동 이관합니다.
+2. 이전 Geyser/Floodgate/ViaVersion/Chunky JAR는 data 바깥의 보관 폴더로 이동합니다. 설정·키는 삭제하지 않습니다.
+3. 브릿지를 새로 빌드·배치합니다. 기존 keepInventory는 원하면 차원마다 직접 변경합니다.
+4. `./mc.sh download-paper`, `docker compose pull minecraft`, `./mc.sh start`, `./mc.sh check`.
+5. 문제 발생 시 정지하고 **업그레이드 전 월드와 당시 설정·이미지**를 복구합니다.
+
+향후 업데이트도 공식 STABLE 빌드·플러그인 호환 확인 → 백업·정지 → 버전·빌드·URL·SHA256
+동시 수정 → 이미지 pull → 기동·검증 순서입니다. `latest` 또는 자동 플러그인 업데이트는 사용하지 않습니다.
+Java25/백업 이미지 태그는 가변이므로 정확한 이미지 재현이 필요하면 검증한 digest를 함께 기록하세요.
+
+## 외부 접속
+
+주소는 `<OCI 공개 IP>:25565`입니다. 설치기는 공개 IP를 추정하거나 NSG를 변경하지 않습니다.
+OCI ingress는 친구 IP CIDR에서 TCP 목적지 25565를 허용하고 SSH 22 규칙을 유지하세요.
+필요한 경우에만 `0.0.0.0/0`을 사용합니다. 호스트 방화벽·Docker 전달 규칙도 별도로 확인하세요.
+25575/8765/47865를 외부에 열거나 Docker 소켓을 게시하지 마세요. 방화벽 전체 초기화는 하지 않습니다.

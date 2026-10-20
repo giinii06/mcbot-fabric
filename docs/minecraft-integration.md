@@ -1,3 +1,12 @@
+> 호스팅 구성은 Paper 26.3 / Java 25 / Java 전용으로 변경되었습니다. 현재 설치·자원·백업·포트는 [server/README.md](../server/README.md)를 따르세요. 아래 Leaf·Bedrock 측정은 이전 구성 기록입니다. 브릿지는 이제 최대 인원과 keepInventory를 강제하지 않습니다.
+
+도전과제 한국어 번역: `src/minecraft/advancements.ko.json`은 Minecraft 26.3 서버 JAR의
+`data/minecraft/advancement/` 중 display가 있는 126개를 공식 `ko_kr.json`과 매칭한 데이터입니다.
+출처는 [26.3 버전 메타데이터](https://piston-meta.mojang.com/v1/packages/11f1aefe473eefba0af62e3286c33b692807b2eb/26.3.json),
+[한국어 언어 리소스](https://resources.download.minecraft.net/10/10dd563534860e65b71a510272202fe03dbd00f5)이며
+언어 파일 SHA-1은 `10dd563534860e65b71a510272202fe03dbd00f5`입니다.
+실행 중 번역 다운로드는 하지 않습니다. Minecraft 업그레이드 시 이 데이터를 함께 갱신하세요.
+
 # Minecraft 통합 (Discord 봇 ↔ Minecraft 서버)
 
 작성 기준: 2026-10-02 · 대상 서버 `server/` (Leaf 1.21.11 #179, Java 21, Geyser + Floodgate)
@@ -33,6 +42,7 @@
 | type | payload |
 |---|---|
 | `player.join` | `player{uuid, username, edition, xuid}` |
+| `player.chat` | `player`, `message` (일반 공개 채팅, 1~1024자) |
 | `player.quit` | `player`, `reason` |
 | `player.death` | `player`, `message`, `cause`, `killer` |
 | `player.advancement` | `player`, `advancement{key,title,description,frame}` |

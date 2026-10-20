@@ -1,7 +1,9 @@
 import type { InboundEvent, PlayerRef } from "../bridge/protocol";
 import type { Registration } from "../db/repositories";
 import type { Services } from "../services";
-import { advancementEmbed, deathEmbed, joinEmbed, quitEmbed } from "./embeds";
+import { escapeMarkdown } from "discord.js";
+import { truncate } from "../core/user";
+import { advancementEmbed, deathEmbed, joinEmbed, playerLabel, quitEmbed } from "./embeds";
 
 type GuildTargets = Map<string, Registration | null>;
 
@@ -48,6 +50,11 @@ export async function handleBridgeEvent(services: Services, event: InboundEvent)
     const member = await memberFor(services, guildId, reg);
 
     switch (event.type) {
+      case "player.chat":
+        await services.logChannels.send(guildId, truncate(
+          `**${escapeMarkdown(playerLabel(member, event.player.username))}**: ${escapeMarkdown(event.message)}`, 2000,
+        ));
+        break;
       case "player.join":
         await services.logChannels.send(guildId, [joinEmbed(event.player, member)]);
         break;
