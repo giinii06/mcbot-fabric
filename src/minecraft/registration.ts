@@ -4,6 +4,7 @@ import type { Registration } from "../db/repositories";
 import type { Services } from "../services";
 import {
   IdentityLookupError,
+  isBedrockUuid,
   validatePlayerInput,
   type IdentityCandidate,
   type IdentityResult,
@@ -16,6 +17,7 @@ export interface PrepareInput {
   userId: string;
   displayName: string;
   input: string;
+  edition?: Edition;
 }
 
 export type PrepareResult =
@@ -64,7 +66,7 @@ export async function prepareRegistration(services: Services, input: PrepareInpu
 
   let identity: IdentityResult;
   try {
-    identity = await services.identity.resolve(validation.value);
+    identity = await services.identity.resolve(validation.value, input.edition);
   } catch (err) {
     if (err instanceof IdentityLookupError) return { ok: false, reason: err.message };
     return { ok: false, reason: "아이디 조회 중 오류가 발생했습니다." };
@@ -75,7 +77,7 @@ export async function prepareRegistration(services: Services, input: PrepareInpu
     return {
       ok: false,
       reason: identity.bedrockCacheMiss
-        ? `${reason}\nGeyser 캐시에 없어 Xbox 계정을 조회하지 못했습니다. 잠시 후 다시 시도해 주세요.`
+        ? `Geyser/Xbox 조회 서비스가 **${validation.value}** 계정을 확인하지 못했습니다. 계정이 없다는 뜻은 아닙니다.\nBedrock 앱에서 먼저 서버에 접속을 시도한 뒤, 30분 안에 /유저등록베드락으로 다시 등록해 주세요. 화이트리스트로 접속이 거절되어도 인증 정보는 확인됩니다.\nJava 계정에 연결해 사용하는 경우에는 /유저등록에 Java 게임 내 이름을 입력해 주세요.`
         : reason,
     };
   }
@@ -128,7 +130,8 @@ function candidateFromRegistration(reg: Registration): IdentityCandidate {
     edition: reg.minecraftEdition,
     uuid: reg.minecraftUuid,
     username: reg.minecraftUsername,
-    xuid: null,
+    xuid: reg.minecraftEdition === "BEDROCK" && isBedrockUuid(reg.minecraftUuid)
+      ? BigInt(`0x${reg.minecraftUuid.replaceAll("-", "")}`).toString() : null,
   };
 }
 

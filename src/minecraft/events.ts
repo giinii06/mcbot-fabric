@@ -8,37 +8,44 @@ import { advancementEmbed, deathEmbed, joinEmbed, playerLabel, quitEmbed } from 
 type GuildTargets = Map<string, Registration | null>;
 
 /**
- * Routes a Minecraft event to the Discord guild(s) that should see it.
+ * Broadcasts Minecraft events to every guild with a configured log channel.
  * Players are matched by UUID (never by username); unregistered players are
- * still logged, just without a Discord name.
+ * still logged, using a registered guild's Discord name when available.
  */
 async function resolveTargets(services: Services, player: PlayerRef | null): Promise<GuildTargets> {
   const targets: GuildTargets = new Map();
 
+  for (const guildId of services.logChannels.guildsWithChannel()) {
+    targets.set(guildId, null);
+  }
+
   if (player) {
     const registrations = services.repos.findRegistrationsByUuid(player.uuid);
     for (const reg of registrations) {
-      if (!targets.has(reg.guildId)) targets.set(reg.guildId, reg);
+      if (targets.has(reg.guildId)) targets.set(reg.guildId, reg);
     }
-    if (targets.size > 0) return targets;
+    for (const [guildId, reg] of targets) {
+      if (!reg) targets.set(guildId, registrations[0] ?? null);
+    }
   }
 
-  for (const guildId of services.logChannels.guildsWithChannel()) {
-    if (!targets.has(guildId)) targets.set(guildId, null);
-  }
   return targets;
 }
 
 async function memberFor(
   services: Services,
-  guildId: string,
   reg: Registration | null,
 ): Promise<Awaited<ReturnType<Services["resolveMember"]>>> {
   if (!reg) return null;
-  return services.resolveMember(guildId, reg.discordUserId);
+  return await services.resolveMember(reg.guildId, reg.discordUserId)
+    ?? (reg.discordDisplayName ? { displayName: reg.discordDisplayName } : null);
 }
 
 export async function handleBridgeEvent(services: Services, event: InboundEvent): Promise<void> {
+  if (event.type === "player.identity") {
+    services.identity.rememberBedrock(event.player);
+    return;
+  }
   if (event.type === "server.status") {
     return;
   }
@@ -46,8 +53,8 @@ export async function handleBridgeEvent(services: Services, event: InboundEvent)
   const targets = await resolveTargets(services, event.player);
   if (targets.size === 0) return;
 
-  for (const [guildId, reg] of targets) {
-    const member = await memberFor(services, guildId, reg);
+  await Promise.all(Array.from(targets, async ([guildId, reg]) => {
+    const member = await memberFor(services, reg);
 
     switch (event.type) {
       case "player.chat":
@@ -86,5 +93,5 @@ export async function handleBridgeEvent(services: Services, event: InboundEvent)
       default:
         break;
     }
-  }
+  }));
 }

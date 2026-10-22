@@ -159,7 +159,7 @@ public final class WhitelistService {
             return Result.ok(true);
         }
 
-        dispatch("fwhitelist add " + quote(gamertag));
+        dispatch("fwhitelist add " + (expected != null ? expected.toString() : quote(gamertag)));
         if (expected != null && contains(expected)) {
             return Result.ok(true);
         }
@@ -186,7 +186,7 @@ public final class WhitelistService {
             return Result.fail("floodgate fwhitelist command is not available");
         }
 
-        dispatch("fwhitelist remove " + quote(gamertag));
+        dispatch("fwhitelist remove " + (expected != null ? expected.toString() : quote(gamertag)));
         boolean stillPresent = (expected != null && contains(expected)) || findByName(gamertag) != null;
         if (!stillPresent) {
             return Result.ok(true);

@@ -8,6 +8,7 @@ import {
 } from "../src/minecraft/registration";
 import {
   BEDROCK_UUID,
+  BEDROCK_XUID,
   GUILD,
   JAVA_NAME,
   JAVA_UUID,
@@ -90,7 +91,7 @@ describe("prepareRegistration", () => {
     if (!result.ok) expect(result.reason).not.toContain("잠시 후 다시 시도");
   });
 
-  test("tells the user to retry when geyser only misses its cache", async () => {
+  test("distinguishes an unavailable Xbox lookup from a nonexistent account", async () => {
     const { services } = createTestServices({
       identity: { fetchImpl: async (input) => (String(input).includes("mojang") ? jsonResponse({}, 404) : jsonResponse({}, 503)) },
       limiter: createRateLimiter(10, 6_000),
@@ -103,8 +104,10 @@ describe("prepareRegistration", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toContain("찾을 수 없습니다");
-      expect(result.reason).toContain("잠시 후 다시 시도");
+      expect(result.reason).not.toContain("계정을 찾을 수 없습니다");
+      expect(result.reason).toContain("계정이 없다는 뜻은 아닙니다");
+      expect(result.reason).toContain("Java 게임 내 이름");
+      expect(result.reason).toContain("/유저등록베드락");
     }
   });
 
@@ -301,5 +304,6 @@ describe("unregister", () => {
     expect(result.ok).toBe(true);
     expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistRemoveBedrock"]);
     expect(bridge.calls[0]?.payload.gamertag).toBe("Bedrock Kid");
+    expect(bridge.calls[0]?.payload.xuid).toBe(BEDROCK_XUID);
   });
 });

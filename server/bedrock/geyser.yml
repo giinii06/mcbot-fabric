@@ -1,0 +1,14 @@
+# Geyser fills in the remaining defaults on first start.
+bedrock:
+  address: 0.0.0.0
+  port: 19132
+  transport: nethernet
+  # Enable after issuing and installing a certificate with renew-bedrock-tls.sh.
+  # signaling:
+  #   builtin:
+  #     https:
+  #       certificate: https/fullchain.pem
+  #       private-key: https/privkey.pem
+java:
+  auth-type: floodgate
+config-version: 11

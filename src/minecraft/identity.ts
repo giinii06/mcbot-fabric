@@ -1,6 +1,6 @@
 import { withTimeout } from "../core/rate-limit";
 import type { Logger } from "../log";
-import type { Edition } from "../bridge/protocol";
+import type { Edition, PlayerRef } from "../bridge/protocol";
 
 export interface JavaIdentity {
   uuid: string;
@@ -133,6 +133,21 @@ export class IdentityService {
     this.cache.clear();
   }
 
+  /** Only call with an authenticated bridge identity, never slash-command input. */
+  rememberBedrock(player: PlayerRef): void {
+    if (player.edition !== "BEDROCK" || !player.xuid || !/^\d{4,20}$/.test(player.xuid)
+      || bedrockUuid(player.xuid) !== player.uuid.toLowerCase()) return;
+    const gamertag = player.username.replace(/^\./, "").replaceAll("_", " ");
+    if (!validatePlayerInput(gamertag).ok) return;
+    const result: IdentityResult = {
+      input: gamertag, status: "BEDROCK", java: null,
+      bedrock: { gamertag, xuid: player.xuid, uuid: player.uuid.toLowerCase() },
+    };
+    // shortcut: retry login after expiry/restart; persist if offline registration is needed.
+    this.cache.set(`BEDROCK:${gamertag.toLowerCase()}`, { result, expiresAt: this.now() + 30 * 60_000 });
+    if (this.cache.size > 500) this.cache.delete(this.cache.keys().next().value as string);
+  }
+
   private async get(url: string, label: string): Promise<Response> {
     try {
       return await withTimeout(this.fetchImpl(url, { method: "GET" }), this.timeoutMs, label);
@@ -168,18 +183,21 @@ export class IdentityService {
   }
 
   /**
-   * Java and Bedrock are always both queried so the caller can decide between
-   * "auto register" and "show the edition buttons".
+   * An explicit edition queries only that account provider.
    */
-  async resolve(rawInput: string): Promise<IdentityResult> {
+  async resolve(rawInput: string, edition?: Edition): Promise<IdentityResult> {
     const validated = validatePlayerInput(rawInput);
     if (!validated.ok) throw new IdentityLookupError(validated.reason);
     const input = validated.value;
 
-    const cached = this.cache.get(input.toLowerCase());
+    const cacheKey = `${edition ?? "BOTH"}:${input.toLowerCase()}`;
+    const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > this.now()) return cached.result;
 
-    const [java, bedrock] = await Promise.all([this.lookupJava(input), this.lookupBedrock(input)]);
+    const [java, bedrock] = await Promise.all([
+      edition === "BEDROCK" ? null : this.lookupJava(input),
+      edition === "JAVA" ? { identity: null, cacheMiss: false } : this.lookupBedrock(input),
+    ]);
 
     let status: IdentityStatus = "NONE";
     if (java && bedrock.identity) status = "BOTH";
@@ -193,7 +211,7 @@ export class IdentityService {
       bedrock: bedrock.identity,
       ...(bedrock.cacheMiss ? { bedrockCacheMiss: true } : {}),
     };
-    this.cache.set(input.toLowerCase(), { result, expiresAt: this.now() + this.cacheTtlMs });
+    this.cache.set(cacheKey, { result, expiresAt: this.now() + this.cacheTtlMs });
     if (this.cache.size > 500) {
       const oldest = this.cache.keys().next();
       if (!oldest.done) this.cache.delete(oldest.value);

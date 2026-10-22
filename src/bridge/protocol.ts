@@ -23,6 +23,18 @@ export const playerRefSchema = z.object({
 });
 export type PlayerRef = z.infer<typeof playerRefSchema>;
 
+export const identityEventSchema = z.object({
+  eventId: eventIdSchema,
+  type: z.literal("player.identity"),
+  ts: tsSchema,
+  player: playerRefSchema.extend({ edition: z.literal("BEDROCK"), xuid: xuidSchema }).refine(
+    (player) => /^00000000-0000-0000-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(player.uuid)
+      && /^\d{4,20}$/.test(player.xuid)
+      && BigInt(`0x${player.uuid.replaceAll("-", "")}`) === BigInt(player.xuid),
+    "Floodgate UUID must match XUID",
+  ),
+});
+
 export const joinEventSchema = z.object({
   eventId: eventIdSchema,
   type: z.literal("player.join"),
@@ -83,6 +95,7 @@ export const statusEventSchema = z.object({
 });
 
 export const inboundEventSchema = z.discriminatedUnion("type", [
+  identityEventSchema,
   joinEventSchema,
   quitEventSchema,
   chatEventSchema,

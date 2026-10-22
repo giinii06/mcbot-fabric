@@ -41,7 +41,8 @@ if [[ -f data/server.properties ]]; then
 fi
 docker network inspect mc-discord >/dev/null 2>&1 || docker network create mc-discord
 ./mc.sh download-paper
+./mc.sh install-bedrock
 docker compose pull
-echo 'OCI NSG/Security List: allow TCP 25565 from friends; retain SSH rules. Do not publish RCON/8765.'
+echo 'OCI NSG/Security List: allow TCP 25565 and TCP/UDP 19132 from friends; retain SSH rules. Do not publish RCON/8765.'
 echo 'Host firewall rules are unchanged; verify Docker forwarding as well as UFW/firewalld.'
 if [[ "${1:-}" != --no-start ]]; then ./mc.sh start; fi

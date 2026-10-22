@@ -36,7 +36,7 @@ check() {
   docker exec minecraft java -version
   docker exec minecraft sh -c 'tr "\000" " " </proc/1/cmdline'
   echo
-  for property in online-mode=true white-list=true enforce-whitelist=true max-players=10 gamemode=survival difficulty=peaceful view-distance=6 simulation-distance=4; do
+  for property in online-mode=true white-list=true enforce-whitelist=true "max-players=$(env_get MAX_PLAYERS)" gamemode=survival difficulty=peaceful view-distance=6 simulation-distance=4; do
     grep -qx "$property" data/server.properties || die "Unexpected property: $property"
   done
   echo "$(env_get PAPER_SHA256)  data/paper-$(env_get MC_VERSION)-$(env_get PAPER_BUILD).jar" | sha256sum -c -
@@ -96,6 +96,14 @@ case "${1:-help}" in
     download "$(env_get CHUNKY_URL)" "$(env_get CHUNKY_SHA256)" data/plugins/Chunky.jar
     echo 'Restart Minecraft before using Chunky'
     ;;
+  install-bedrock)
+    download "$(env_get GEYSER_URL)" "$(env_get GEYSER_SHA256)" data/plugins/Geyser-Spigot.jar
+    download "$(env_get FLOODGATE_URL)" "$(env_get FLOODGATE_SHA256)" data/plugins/floodgate-spigot.jar
+    mkdir -p data/plugins/Geyser-Spigot data/plugins/floodgate
+    [[ -f data/plugins/Geyser-Spigot/config.yml ]] || cp bedrock/geyser.yml data/plugins/Geyser-Spigot/config.yml
+    [[ -f data/plugins/floodgate/config.yml ]] || cp bedrock/floodgate.yml data/plugins/floodgate/config.yml
+    echo 'Restart Minecraft before using Bedrock; allow TCP and UDP 19132 in the cloud firewall'
+    ;;
   check) check ;;
   pregen-overworld) pregen world 2000 ;;
   pregen-nether) pregen world_nether 1000 ;;
@@ -105,7 +113,7 @@ case "${1:-help}" in
   help|-h|--help)
     echo './mc.sh start|stop|restart|status|logs [-f]|check|players|tps|mspt'
     echo './mc.sh command <Minecraft command> | backup | verify-backup FILE'
-    echo './mc.sh download-paper | install-chunky'
+    echo './mc.sh download-paper | install-chunky | install-bedrock'
     echo './mc.sh pregen-overworld|pregen-nether|pregen-status|pregen-pause|pregen-continue'
     ;;
   *) die "Unknown command: $1" ;;

@@ -8,6 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.LinkedHashMap;
@@ -23,6 +24,14 @@ public final class ConnectionListener implements Listener {
     public ConnectionListener(EventPublisher publisher, DeathCounter deaths) {
         this.publisher = publisher;
         this.deaths = deaths;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        // Floodgate has authenticated the identity even when the whitelist rejects login.
+        if (PlayerIdentity.xuidOf(event.getUniqueId()) != null && event.getName().startsWith(".")) {
+            publisher.submit(base("player.identity", event.getUniqueId(), event.getName()));
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

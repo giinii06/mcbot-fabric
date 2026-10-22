@@ -42,6 +42,7 @@
 | type | payload |
 |---|---|
 | `player.join` | `player{uuid, username, edition, xuid}` |
+| `player.identity` | 인증된 Bedrock 접속 시도 `player`; 화이트리스트 거절 시에도 전송하며 Discord 로그에는 표시하지 않음 |
 | `player.chat` | `player`, `message` (일반 공개 채팅, 1~1024자) |
 | `player.quit` | `player`, `reason` |
 | `player.death` | `player`, `message`, `cause`, `killer` |

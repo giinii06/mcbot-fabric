@@ -3,7 +3,7 @@ import { leaderboardCommand } from "./leaderboard";
 import { listCommand } from "./list";
 import { logSetupCommand } from "./log-setup";
 import { lookupCommand } from "./lookup";
-import { registerCommand } from "./register";
+import { bedrockRegisterCommand, registerCommand } from "./register";
 import { unregisterCommand } from "./unregister";
 import { whitelistSyncCommand } from "./whitelist-sync";
 import type { CommandModule } from "./types";
@@ -11,6 +11,7 @@ import type { CommandModule } from "./types";
 export const commandModules: CommandModule[] = [
   logSetupCommand,
   registerCommand,
+  bedrockRegisterCommand,
   unregisterCommand,
   forceUnregisterCommand,
   lookupCommand,

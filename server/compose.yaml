@@ -3,7 +3,7 @@
 # Paper 26.3 build #205 / Java 25 / MinecraftBridge + optional Chunky
 #
 # 컨테이너: minecraft (게임 서버), minecraft-backup (사이드카 백업)
-# 포트: TCP 25565 (Java)
+# 포트: TCP 25565 (Java), TCP/UDP 19132 (Bedrock)
 # 이 디렉터리(server/)만 다른 호스트에 복사해도 그대로 기동됩니다.
 # 봇과 함께 쓸 때는 루트의 mcbot compose와 외부 네트워크 mc-discord를 공유합니다.
 # =============================================================================
@@ -19,6 +19,8 @@ services:
     stdin_open: true
     ports:
       - "${JAVA_PORT:-25565}:25565/tcp"
+      - "19132:19132/tcp"
+      - "19132:19132/udp"
     environment:
       EULA: "TRUE"
       TZ: ${TZ}
@@ -41,6 +43,7 @@ services:
       RCON_PASSWORD_FILE: /run/secrets/rcon_password
       # --- server.properties (online-mode 유지) ---
       ONLINE_MODE: "true"
+      ENFORCE_SECURE_PROFILE: "false"
       # --- 화이트리스트 (Discord 봇이 관리) ---
       ENABLE_WHITELIST: "true"
       ENFORCE_WHITELIST: "true"
@@ -49,7 +52,7 @@ services:
       PVP: "true"
       VIEW_DISTANCE: "${VIEW_DISTANCE:-6}"
       SIMULATION_DISTANCE: "${SIMULATION_DISTANCE:-4}"
-      MAX_PLAYERS: "${MAX_PLAYERS:-10}"
+      MAX_PLAYERS: "${MAX_PLAYERS:-1000}"
       SYNC_CHUNK_WRITES: "true"
       PAUSE_WHEN_EMPTY_SECONDS: "0"
       USE_NATIVE_TRANSPORT: "true"

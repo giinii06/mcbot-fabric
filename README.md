@@ -1,8 +1,8 @@
 # mcbot — Paper 서버 + TypeScript Discord 봇
 
-Oracle ARM64 2 OCPU / 12GB용 **Paper 26.3 #205 / Java 25 / Java 정품 10인 생존** 서버와
+Oracle ARM64 2 OCPU / 12GB용 **Paper 26.3 #205 / Java 25 / Java 정품, 최대 접속 1000명 생존** 서버와
 화이트리스트·플레이타임·로그 채널을 관리하는 Bun/TypeScript Discord 봇입니다.
-게임 호스팅 설정과 운영 절차는 [server/README.md](server/README.md)를 따릅니다.
+Java·Bedrock 크로스플레이 호스팅 설정과 운영 절차는 [server/README.md](server/README.md)를 따릅니다.
 실제 기동·연동·백업·복원 결과는 [구축 검증 기록](server/VALIDATION.md)에 있습니다.
 
 ```text
@@ -13,22 +13,29 @@ Discord ←→ mcbot:47865 ←→ MinecraftBridge:8765 (private mc-discord netwo
 
 | 항목 | 값 |
 |---|---|
-| 게임 | Paper 26.3 STABLE #205, survival, peaceful(고정), PvP, max 10 |
+| 게임 | Paper 26.3 STABLE #205, survival, peaceful(고정), PvP, max 1000 |
 | 런타임 | itzg/minecraft-server:java25, ARM64 지원 |
 | 자원 | Xms 2G / Xmx 6G, 게임 메모리 상한 8g·2 CPU |
 | 거리 | view 6 / simulation 4 |
 | 백업 | 24시간 간격, zstd 단일 스레드, 7일 보관, 공간·무결성 검사 |
 | 인증 | online-mode + whitelist + enforce-whitelist |
-| 플러그인 | MinecraftBridge, 필요 시 Chunky 1.5.3, Paper 내장 Spark |
-| 포트 | 공개 TCP 25565; 봇 47865는 loopback, 브릿지·RCON은 미게시 |
+| 플러그인 | MinecraftBridge, Geyser, Floodgate, 필요 시 Chunky 1.5.3, Paper 내장 Spark |
+| 포트 | 공개 TCP 25565, TCP/UDP 19132; 봇 47865는 loopback, 브릿지·RCON은 미게시 |
 
-Bedrock 호스팅 플러그인과 UDP 공개는 제거했습니다. 봇의 기존 Java/Bedrock API 및 데이터 형식은
-유지하며, 이 서버에서는 Java 등록을 사용합니다. 기존 Bedrock 등록 데이터는 삭제하지 않습니다.
+Geyser·Floodgate를 통해 Bedrock도 같은 월드에 접속합니다. Discord에서
+Java 및 Java 계정에 연결한 Bedrock은 `/유저등록`으로 Java 이름을 등록합니다.
+연결하지 않은 Bedrock은 `/유저등록베드락`에서 게이머태그를 등록합니다.
+계정 연결 절차와 인벤토리 주의사항은 [운영 안내](server/README.md#typescript-discord-봇-연결)를 따릅니다. Bedrock 접속 포트는 19132입니다.
 브릿지는 인원수나 keepInventory를 강제하지 않습니다. 기존 월드 규칙은 보존합니다.
 마크의 일반 공개 채팅은 `/마크로그설치`로 지정한 Discord 로그 채널에 일반 텍스트 메시지로
 `닉네임 (마크이름): 채팅 내용`으로 표시됩니다. 명령어·취소된 채팅은 전송하지 않으며 멘션 알림은 차단합니다.
 도전과제 이름은 Minecraft 26.3 공식 한국어 번역(기본 126개)을 사용하며 설명은 표시하지 않습니다.
 번역 목록에 없는 도전과제는 서버가 제공한 이름을 유지합니다.
+
+같은 봇을 여러 Discord 서버에 초대할 수 있습니다. 각 서버에서 관리자가 `/마크로그설치`를
+실행하면 접속·퇴장·사망·도전과제·채팅 로그가 설정된 모든 서버로 동시에 전송됩니다.
+플레이어 등록 여부와 관계없이 전송하며, 등록된 서버의 Discord 닉네임을 사용합니다.
+여러 서버에 등록된 경우 수신 서버의 닉네임을 우선하고, 등록 정보가 없는 서버는 다른 등록 서버의 닉네임을 사용합니다.
 
 ## 빠른 시작
 
@@ -70,7 +77,8 @@ EULA에 동의하는 운영자가 설치해야 하며 Compose는 `EULA=TRUE`로 
 
 | 명령 | 권한 | 설명 |
 |---|---|---|
-| `/유저등록 마크아이디:` | 모든 멤버 | Java/Bedrock 계정 연결 (화이트리스트 추가 → DB 저장, 실패 시 롤백) |
+| `/유저등록 마크아이디:` | 모든 멤버 | Java 계정 연결 (화이트리스트 추가 → DB 저장, 실패 시 롤백) |
+| `/유저등록베드락 마크아이디:` | 모든 멤버 | Xbox 게이머태그로 Bedrock 계정 연결 |
 | `/유저해제` | 모든 멤버 | 본인 연결 해제 (DB 삭제 → 화이트리스트 제거, 실패 시 복구) |
 | `/마크리더보드` | 모든 멤버 | 누적 플레이타임 TOP (시간 → 이름 → UUID 정렬) |
 | `/마크로그설치` | 관리자 | 현재 채널을 로그 채널로 지정 |

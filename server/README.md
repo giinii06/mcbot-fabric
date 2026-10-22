@@ -1,6 +1,6 @@
 # Oracle ARM64 Paper 생존 서버
 
-2 OCPU / 12GB 호스트용 Java 전용 10인 서버입니다. Paper **26.3 #205 STABLE**과
+2 OCPU / 12GB 호스트용 Java·Bedrock 크로스플레이 서버(최대 접속 설정 1000명)입니다. Paper **26.3 #205 STABLE**과
 `itzg/minecraft-server:java25`(ARM64 지원)를 사용합니다. 게임 버전과 빌드는 고정되며 자동으로 올리지 않습니다.
 공식 출처: [Paper API](https://fill.papermc.io/v3/projects/paper/versions/26.3/builds/205),
 [Java 요구사항](https://docs.papermc.io/paper/getting-started/),
@@ -31,11 +31,11 @@ Docker가 없을 때 임의 원격 설치 스크립트를 실행하지 않으며
 | 힙 / 컨테이너 메모리 | Xms 2G / Xmx 6G / 게임 8g |
 | CPU | 게임 상한 2.0, 백업 0.25·낮은 CPU shares |
 | 백업 메모리 | 512m |
-| 게임 | survival, peaceful(고정), PvP 켬, 10명 |
+| 게임 | survival, peaceful(고정), PvP 켬, 최대 접속 설정 1000명 |
 | 인증·접속 제한 | online-mode, white-list, enforce-whitelist 모두 true |
 | 시야 / 시뮬레이션 | 6 / 4 |
 | GC | Java 25 기본 G1, Aikar/MeowIce 플래그 없음 |
-| 공개 포트 | TCP 25565만; RCON 25575·브릿지 8765는 호스트 미게시 |
+| 공개 포트 | Java TCP 25565, Bedrock TCP/UDP 19132; RCON 25575·브릿지 8765는 호스트 미게시 |
 
 게임과 백업·봇은 같은 2 OCPU를 공유합니다. CPU 상한 합계는 예약량이 아니며,
 동시 부하에서는 서로 경쟁합니다. 다른 상주 서비스가 있으면 메모리 여유를 계속 확인하세요.
@@ -70,10 +70,44 @@ cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
 5. `curl -fsS http://127.0.0.1:47865/health`의 `minecraft:true` 확인.
 
 봇이 화이트리스트를 관리하므로 `WHITELIST` 목록 환경변수를 추가하지 마세요.
-Discord에서 `/유저등록`을 사용합니다.
+Discord에서 Java는 `/유저등록`, Bedrock은 `/유저등록베드락`을 사용합니다.
 봇 없이 운영할 때만 `./mc.sh command whitelist add Java이름`으로 추가합니다.
-Geyser/Floodgate/ViaVersion과 Bedrock UDP 포트는 이 호스팅 구성에 포함하지 않습니다.
-봇의 Bedrock 기능은 소스에 남아 있지만 이 Java 전용 서버에서는 사용하지 않습니다.
+Geyser 2.12.0 b1268·Floodgate 2.2.5 b141을 사용합니다. Java 26.3은 Geyser가 직접
+지원하므로 ViaVersion은 필요하지 않습니다. Bedrock은 26.50~26.52 클라이언트를 사용하세요.
+
+기존 설치에 추가할 때는 `.env.example`의 `GEYSER_*`, `FLOODGATE_*` 값을 `.env`로 옮긴 뒤
+`./mc.sh backup`, `./mc.sh install-bedrock`, `./mc.sh restart`를 실행합니다.
+JAR는 고정 URL·SHA256으로 검증하며 기존 플러그인 설정·키는 덮어쓰지 않습니다.
+초기 설정은 `bedrock/`에서 복사하고 나머지 기본값과 키는 플러그인이 생성합니다.
+
+Geyser는 NetherNet을 사용하므로 호스트 및 OCI NSG/Security List에서 **TCP와 UDP 19132**를
+모두 허용해야 합니다. `ENFORCE_SECURE_PROFILE=false`로 Bedrock 채팅을 허용하며,
+Java 정품 인증(`online-mode=true`)과 화이트리스트는 유지합니다.
+Floodgate Global Linking을 활성화합니다. Java 캐릭터를 Bedrock에서도 쓰려면
+[공식 연결 서버](https://geysermc.org/wiki/floodgate/linking/)에서 두 계정으로 접속하여
+`/linkaccount`와 반대쪽 계정의 `/linkaccount <코드>`로 연결한 뒤 이 서버에 재접속합니다.
+Microsoft 계정이 같아도 이 연결 절차는 별도로 필요합니다.
+연결한 계정은 Discord의 `/유저등록`으로 Java 이름을 등록하고, 기존 Java 등록자는 다시 등록하지 않습니다.
+연결하지 않은 Bedrock 계정은 `/유저등록베드락`을 사용합니다.
+연결하면 Java UUID·인벤토리·위치·도전과제를 사용하므로 기존 Bedrock 데이터는 연결을 해제할 때까지
+접근할 수 없습니다. 아이템은 자동으로 합쳐지지 않으니 연결 전에 Java 캐릭터로 옮기세요.
+이 서버의 로컬 계정 연결 DB는 사용하지 않으며 계정 연결을 필수로 강제하지 않습니다.
+`data/plugins/floodgate/key.pem`은 비밀 키이며 외부에 공유하지 마세요.
+
+Xbox 조회가 503으로 실패하면 Bedrock 앱에서 먼저 이 서버에 접속을 시도한 뒤 30분 안에
+`/유저등록베드락`을 실행합니다. 브릿지가 화이트리스트 거절 전에 인증된 UUID/XUID를 봇에 전달하여
+외부 Xbox 조회 없이 등록할 수 있습니다. 이 임시 인증 캐시는 봇 재시작 시 사라지므로 다시 접속을 시도합니다.
+
+공인 IP `140.245.73.42`의 NetherNet signaling은 HTTPS로 제공합니다.
+iOS 26.52에서 HTTP signaling으로 접속되지 않던 문제를 해결하기 위해 적용했습니다.
+현재 운영 config의 HTTPS 경로는 `data/plugins/Geyser-Spigot/https/`를 가리킵니다.
+새 호스트에서는 인증서를 먼저 준비하고 `bedrock/geyser.yml`의 HTTPS 예시를 운영 config에서 활성화합니다.
+IP 인증서는 Let's Encrypt의 6일 인증서이며 `renew-bedrock-tls.sh`가 Certbot 고정 이미지로
+갱신·검증·설치하고 Geyser만 reload합니다. `mcbot-bedrock-tls.timer`는 12시간마다 실행합니다.
+OCI TCP 80 규칙은 인증서 갱신을 위해 유지하고, 80 포트는 인증하는 동안에만 수신합니다.
+ACME 계정은 `secrets/letsencrypt/`, 서비스·타이머는 호스트 `/etc/systemd/system/`에 있습니다.
+상태는 `systemctl status mcbot-bedrock-tls.timer` 및 `journalctl -u mcbot-bedrock-tls.service`로 확인합니다.
+공인 IP가 바뀌면 스크립트의 IP와 인증서를 함께 갱신해야 합니다.
 
 ## 운영·성능 측정
 
@@ -176,7 +210,7 @@ Java25/백업 이미지 태그는 가변이므로 정확한 이미지 재현이 
 
 ## 외부 접속
 
-주소는 `<OCI 공개 IP>:25565`입니다. 설치기는 공개 IP를 추정하거나 NSG를 변경하지 않습니다.
-OCI ingress는 친구 IP CIDR에서 TCP 목적지 25565를 허용하고 SSH 22 규칙을 유지하세요.
+Java 주소는 `<OCI 공개 IP>:25565`, Bedrock 주소는 같은 IP의 포트 `19132`입니다. 설치기는 공개 IP를 추정하거나 NSG를 변경하지 않습니다.
+OCI ingress는 친구 IP CIDR에서 TCP 목적지 25565 및 TCP/UDP 목적지 19132를 허용하고 SSH 22 규칙을 유지하세요.
 필요한 경우에만 `0.0.0.0/0`을 사용합니다. 호스트 방화벽·Docker 전달 규칙도 별도로 확인하세요.
 25575/8765/47865를 외부에 열거나 Docker 소켓을 게시하지 마세요. 방화벽 전체 초기화는 하지 않습니다.

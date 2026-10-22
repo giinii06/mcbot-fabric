@@ -27,6 +27,7 @@ describe("advancementEmbed", () => {
     const embed = advancementEmbed(PLAYER, DISCORD, {
       key: "minecraft:story/mine_diamond", title: "Diamonds!", description: "Acquire diamonds",
     }).toJSON();
+    expect(embed.color).toBe(0x57f287);
     expect(embed.description).toBe("**기니 (giinii77)** 님이 도전과제를 달성했습니다.");
     expect(embed.fields).toEqual([
       { name: "도전과제", value: "다이아몬드다!" },
