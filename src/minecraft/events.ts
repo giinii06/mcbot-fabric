@@ -6,11 +6,13 @@ import { truncate } from "../core/user";
 import { advancementEmbed, deathEmbed, joinEmbed, playerLabel, quitEmbed } from "./embeds";
 
 type GuildTargets = Map<string, Registration | null>;
+const PRIVATE_LOG_GUILD = "1214203256620847124";
 
 /**
  * Broadcasts Minecraft events to every guild with a configured log channel.
  * Players are matched by UUID (never by username); unregistered players are
  * still logged, using a registered guild's Discord name when available.
+ * Players registered in PRIVATE_LOG_GUILD are logged only in that guild.
  */
 async function resolveTargets(services: Services, player: PlayerRef | null): Promise<GuildTargets> {
   const targets: GuildTargets = new Map();
@@ -21,6 +23,12 @@ async function resolveTargets(services: Services, player: PlayerRef | null): Pro
 
   if (player) {
     const registrations = services.repos.findRegistrationsByUuid(player.uuid);
+    const privateRegistration = registrations.find((reg) => reg.guildId === PRIVATE_LOG_GUILD);
+    if (privateRegistration) {
+      return targets.has(PRIVATE_LOG_GUILD)
+        ? new Map([[PRIVATE_LOG_GUILD, privateRegistration]])
+        : new Map();
+    }
     for (const reg of registrations) {
       if (targets.has(reg.guildId)) targets.set(reg.guildId, reg);
     }

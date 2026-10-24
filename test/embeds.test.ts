@@ -92,7 +92,7 @@ describe("deathEmbed", () => {
   });
 
   test("works without a linked discord member", () => {
-    expect(deathLine({ ...DEATH, discord: null, cause: "lava" })).toBe("giinii77이(가) 용암에 빠져 죽었습니다");
+    expect(deathLine({ ...DEATH, discord: null, cause: "lava" })).toBe("? (giinii77) 이(가) 용암에 빠져 죽었습니다");
   });
 });
 

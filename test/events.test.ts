@@ -5,7 +5,7 @@ import { handleBridgeEvent } from "../src/minecraft/events";
 import { bedrockUuid } from "../src/minecraft/identity";
 import { prepareRegistration } from "../src/minecraft/registration";
 import { createBridgeHandler } from "../src/bridge/server";
-import { createTestServices, GUILD, JAVA_UUID, seedRegistration, USER } from "./helpers";
+import { BEDROCK_UUID, BEDROCK_XUID, createTestServices, GUILD, JAVA_UUID, seedRegistration, USER } from "./helpers";
 
 const OTHER_GUILD = "222222222222222222";
 const player = { uuid: JAVA_UUID, username: "Notch", edition: "JAVA" as const };
@@ -48,6 +48,50 @@ const events: InboundEvent[] = [
 ];
 
 for (const event of events) {
+  test(`${event.type} replaces the unknown Discord name in new logs after Bedrock registration`, async () => {
+    const { services, repos, db } = createTestServices();
+    const messages: string[] = [];
+    const bedrockEvent = { ...event, player: { uuid: BEDROCK_UUID, username: ".BedrockKid", edition: "BEDROCK" as const, xuid: BEDROCK_XUID } };
+    try {
+      repos.setLogChannel(GUILD, "channel-a", 1);
+      services.logChannels.send = async (_guildId, message) => {
+        messages.push(typeof message === "string" ? message : JSON.stringify(message));
+        return true;
+      };
+      services.resolveMember = async () => null;
+      await handleBridgeEvent(services, bedrockEvent);
+      expect(messages[0]).toContain("? (.BedrockKid)");
+
+      repos.insertRegistration(seedRegistration({ guildId: GUILD, discordUserId: USER,
+        minecraftUuid: BEDROCK_UUID, minecraftUsername: ".BedrockKid", minecraftEdition: "BEDROCK",
+        discordDisplayName: "등록닉네임",
+      }));
+      await handleBridgeEvent(services, bedrockEvent);
+      expect(messages[1]).toContain("등록닉네임 (.BedrockKid)");
+      expect(messages[0]).toContain("? (.BedrockKid)");
+    } finally { db.close(); }
+  });
+
+  for (const hasLogChannel of [true, false]) {
+    test(`${event.type} stays in the private guild (log channel: ${hasLogChannel})`, async () => {
+      const privateGuild = "1214203256620847124";
+      const { services, repos, db, sent } = createTestServices();
+      try {
+        repos.insertRegistration(seedRegistration({ guildId: GUILD, discordUserId: USER }));
+        repos.insertRegistration(seedRegistration({ guildId: privateGuild, discordUserId: USER }));
+        repos.setLogChannel(GUILD, "channel-a", 1);
+        repos.setLogChannel(OTHER_GUILD, "channel-b", 1);
+        if (hasLogChannel) repos.setLogChannel(privateGuild, "private-channel", 1);
+
+        await handleBridgeEvent(services, event);
+
+        expect(sent).toEqual(hasLogChannel
+          ? [{ guildId: privateGuild, embeds: event.type === "player.chat" ? 0 : 1 }]
+          : []);
+      } finally { db.close(); }
+    });
+  }
+
   test(`${event.type} reaches all configured guilds with the registered guild nickname`, async () => {
     const { services, repos, db, log } = createTestServices();
     const deliveries = new Map<string, string>();

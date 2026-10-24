@@ -1,11 +1,13 @@
 import { unregister, refreshDisplayName } from "../registration";
 import { displayNameOf, sendError, sendSuccess } from "../../discord/replies";
-import type { CommandModule } from "./types";
+import { editionOption, type CommandModule } from "./types";
+import type { Edition } from "../../db/repositories";
 
 export const unregisterCommand: CommandModule = {
   name: "유저해제",
   description: "본인의 Minecraft 계정 연결을 해제합니다.",
   ephemeral: true,
+  options: [editionOption],
 
   async execute({ interaction, services }) {
     await interaction.deferReply({ ephemeral: true });
@@ -21,6 +23,7 @@ export const unregisterCommand: CommandModule = {
     const result = await unregister(services, {
       guildId,
       userId: interaction.user.id,
+      edition: interaction.options.getString("에디션", true) as Edition,
       actorId: interaction.user.id,
       reason: "본인 요청",
     });
@@ -33,7 +36,7 @@ export const unregisterCommand: CommandModule = {
     await sendSuccess(
       interaction,
       "등록이 해제되었습니다",
-      `**${result.registration.minecraftUsername}** 계정이 화이트리스트에서 제거되었습니다.`,
+      `**${result.registration.minecraftUsername}** (${result.registration.minecraftEdition}) 계정 연결이 해제되었습니다.`,
     );
   },
 };

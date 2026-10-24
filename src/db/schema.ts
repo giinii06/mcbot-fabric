@@ -62,4 +62,26 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE minecraft_registrations ADD COLUMN discord_display_name TEXT;
     `,
   },
+  {
+    name: "004_registration_per_edition",
+    sql: `
+      CREATE TABLE minecraft_registrations_by_edition (
+        guild_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL,
+        minecraft_uuid TEXT NOT NULL,
+        minecraft_username TEXT NOT NULL,
+        minecraft_edition TEXT NOT NULL CHECK (minecraft_edition IN ('JAVA', 'BEDROCK')),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        discord_display_name TEXT,
+        PRIMARY KEY (guild_id, discord_user_id, minecraft_edition)
+      );
+      INSERT INTO minecraft_registrations_by_edition SELECT * FROM minecraft_registrations;
+      DROP TABLE minecraft_registrations;
+      ALTER TABLE minecraft_registrations_by_edition RENAME TO minecraft_registrations;
+      CREATE UNIQUE INDEX idx_minecraft_registrations_uuid ON minecraft_registrations (guild_id, minecraft_uuid);
+      CREATE INDEX idx_minecraft_registrations_discord ON minecraft_registrations (discord_user_id);
+      CREATE INDEX idx_minecraft_registrations_uuid_only ON minecraft_registrations (minecraft_uuid);
+    `,
+  },
 ];

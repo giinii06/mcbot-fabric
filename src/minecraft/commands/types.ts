@@ -4,6 +4,15 @@ import type {
   ChatInputCommandInteraction,
 } from "discord.js";
 import type { Services } from "../../services";
+import { ApplicationCommandOptionType } from "discord.js";
+
+export const editionOption: ApplicationCommandOptionData = {
+  type: ApplicationCommandOptionType.String,
+  name: "에디션",
+  description: "조회하거나 해제할 Minecraft 계정의 에디션",
+  required: true,
+  choices: [{ name: "Java", value: "JAVA" }, { name: "Bedrock", value: "BEDROCK" }],
+};
 
 export interface CommandContext {
   interaction: ChatInputCommandInteraction;

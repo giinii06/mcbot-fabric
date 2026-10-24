@@ -74,15 +74,14 @@
 ## 2. 화이트리스트 규칙
 
 - 서버는 `ENABLE_WHITELIST=true` (itzg 이미지 환경변수) → `white-list=true`, `enforce-whitelist=true`.
+- MinecraftBridge는 `ProfileWhitelistVerifyEvent`에서 Floodgate API가 인증한 Bedrock 접속(연결된 Java 계정 포함)만 화이트리스트 예외로 허용합니다. Java 접속과 차단·정원 검사는 유지합니다. Bedrock의 Discord 등록은 접속 필수 조건이 아닙니다.
   `WHITELIST` 목록 환경변수는 **설정하지 않습니다** (봇이 관리, 매 시작 재동기화 방지).
 - **Java**: `whitelist add/remove <name>` 콘솔 디스패치 → 실패 시
   `OfflinePlayer.setWhitelisted` → 항상 `getWhitelistedPlayers()` 로 결과 검증.
-- **Bedrock**: `fwhitelist add/remove "<gamertag>"` (Floodgate).
-  Floodgate 는 **Xbox 글로벌 API 로 gamertag 를 검증**하므로 존재하지 않는 gamertag 는 등록 거부(502)됩니다.
-  등록된 항목은 `whitelist.json` 에 Floodgate UUID 로 들어오고,
-  플러그인은 `00000000-0000-0000-…` UUID 또는 이름으로 존재를 확인합니다.
-- 등록 시 화이트리스트 추가 → DB 저장, **DB 실패 시 화이트리스트 롤백**.
-  해제는 반대(DB 삭제 → 화이트리스트 제거, 실패 시 재-add 복구).
+- **Bedrock**: 인증된 Minecraft UUID와 Discord 이름의 연결만 DB에 저장합니다. 등록·해제·동기화는 Bedrock 화이트리스트 API를 호출하지 않습니다. 계정 조회·입력 검증과 중복 등록 방지는 유지합니다.
+- Java 등록 시 화이트리스트 추가 → DB 저장, **DB 실패 시 화이트리스트 롤백**.
+- 등록 기본 키는 `(guild_id, discord_user_id, minecraft_edition)`이며 Java·Bedrock을 각각 하나씩 연결할 수 있습니다. Minecraft UUID는 서버 내에서 여전히 유일합니다. 마이그레이션 004는 기존 등록을 보존하고, 조회·해제는 에디션별로 처리합니다.
+  Java 해제는 화이트리스트 제거 → DB 삭제이며, DB 삭제 실패 시 화이트리스트를 복구합니다.
 - 첫 등록 직후 `whitelist.json` 의 `name` 이 `(unknown)` 으로 남을 수 있습니다.
   온라인 모드는 **UUID 기준 매칭**이라 접속에는 영향 없고, 첫 접속 시 서버가 이름을 갱신합니다.
 

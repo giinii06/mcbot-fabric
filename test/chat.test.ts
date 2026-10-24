@@ -66,6 +66,6 @@ test("escaped chat fits Discord's 2000 character content limit", async () => {
     };
     await handleBridgeEvent(services, { type: "player.chat", eventId: "chat-event-0003", ts: Date.now(), player, message: "\\".repeat(1024) });
     expect(content).toHaveLength(2000);
-    expect(content?.startsWith("**Notch**: ")).toBe(true);
+    expect(content?.startsWith("**? (Notch)**: ")).toBe(true);
   } finally { db.close(); }
 });

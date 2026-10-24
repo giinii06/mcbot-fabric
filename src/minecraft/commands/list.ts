@@ -40,14 +40,14 @@ export const listCommand: CommandModule = {
     });
 
     const rest = registrations.length - visible.length;
-    const suffix = rest > 0 ? `\n\n… 외 ${rest}명` : "";
+    const suffix = rest > 0 ? `\n\n… 외 ${rest}개 계정` : "";
 
     await interaction.editReply({
       embeds: [
         infoEmbed(
           "마인크래프트 유저 목록",
           truncate(`${lines.join("\n")}${suffix}`, 3900),
-          [{ name: "총 등록", value: `${registrations.length}명`, inline: true }],
+          [{ name: "총 등록", value: `${registrations.length}개 계정`, inline: true }],
         ),
       ],
     });

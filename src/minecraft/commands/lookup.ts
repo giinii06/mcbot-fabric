@@ -2,7 +2,8 @@ import { ApplicationCommandOptionType } from "discord.js";
 import { formatDuration } from "../../core/duration";
 import { playerLabel, infoEmbed } from "../embeds";
 import { sendError } from "../../discord/replies";
-import type { CommandModule } from "./types";
+import { editionOption, type CommandModule } from "./types";
+import type { Edition } from "../../db/repositories";
 
 export const lookupCommand: CommandModule = {
   name: "유저조회",
@@ -10,6 +11,7 @@ export const lookupCommand: CommandModule = {
   admin: true,
   ephemeral: true,
   options: [
+    editionOption,
     {
       type: ApplicationCommandOptionType.User,
       name: "유저",
@@ -27,7 +29,8 @@ export const lookupCommand: CommandModule = {
     }
 
     const target = interaction.options.getUser("유저") ?? interaction.user;
-    const registration = services.repos.getRegistration(guildId, target.id);
+    const edition = interaction.options.getString("에디션", true) as Edition;
+    const registration = services.repos.getRegistration(guildId, target.id, edition);
     if (!registration) {
       await sendError(interaction, "등록된 Minecraft 계정이 없습니다.");
       return;

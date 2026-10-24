@@ -40,7 +40,7 @@ function discordPart(member: DiscordDisplaySource | null): string | null {
 
 /** `Discord display name (Minecraft username)` - the only accepted format. */
 export function playerLabel(member: DiscordDisplaySource | null, minecraftUsername: string): string {
-  const discord = discordPart(member);
+  const discord = discordPart(member) ?? "?";
   const mc = minecraftUsername.trim();
   if (discord && mc && discord !== mc) return `${discord} (${mc})`;
   return discord ?? mc;

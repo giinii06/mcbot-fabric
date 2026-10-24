@@ -14,12 +14,14 @@ java {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.opencollab.dev/main/")
 }
 
 dependencies {
     // provided by the Minecraft server at runtime
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.google.code.gson:gson:2.11.0")
+    compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
 
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation("com.google.code.gson:gson:2.11.0")

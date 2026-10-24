@@ -1,5 +1,6 @@
 package kr.mcbot.bridge.events;
 
+import com.destroystokyo.paper.event.profile.ProfileWhitelistVerifyEvent;
 import kr.mcbot.bridge.bridge.PlayerIdentity;
 import kr.mcbot.bridge.publish.EventPublisher;
 import kr.mcbot.bridge.stats.DeathCounter;
@@ -14,16 +15,26 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /** Join / quit events -> Discord log channel. */
 public final class ConnectionListener implements Listener {
 
     private final EventPublisher publisher;
     private final DeathCounter deaths;
+    private final Predicate<UUID> isFloodgatePlayer;
 
-    public ConnectionListener(EventPublisher publisher, DeathCounter deaths) {
+    public ConnectionListener(EventPublisher publisher, DeathCounter deaths, Predicate<UUID> isFloodgatePlayer) {
         this.publisher = publisher;
         this.deaths = deaths;
+        this.isFloodgatePlayer = isFloodgatePlayer;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onWhitelistVerify(ProfileWhitelistVerifyEvent event) {
+        if (isFloodgatePlayer.test(event.getPlayerProfile().getId())) {
+            event.setWhitelisted(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

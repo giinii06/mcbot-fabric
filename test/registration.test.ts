@@ -171,7 +171,7 @@ describe("commitRegistration", () => {
     const result = await commitRegistration(services, input);
     expect(result.ok).toBe(true);
     expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistAddJava"]);
-    expect(repos.getRegistration(GUILD, USER)?.minecraftUsername).toBe(JAVA_NAME);
+    expect(repos.getRegistration(GUILD, USER, "JAVA")?.minecraftUsername).toBe(JAVA_NAME);
     expect(repos.listAudit(GUILD, 10)[0]?.action).toBe("REGISTER");
     expect(sent).toHaveLength(1);
     expect(sent[0]?.guildId).toBe(GUILD);
@@ -188,7 +188,7 @@ describe("commitRegistration", () => {
       expect(result.reason).toContain("화이트리스트 추가에 실패");
       expect(result.reason).toContain("rejected by server");
     }
-    expect(repos.getRegistration(GUILD, USER)).toBeNull();
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).toBeNull();
   });
 
   test("a bridge outage is reported as a whitelist failure", async () => {
@@ -201,7 +201,7 @@ describe("commitRegistration", () => {
       expect(result.stage).toBe("whitelist");
       expect(result.reason).toContain("ECONNREFUSED");
     }
-    expect(repos.getRegistration(GUILD, USER)).toBeNull();
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).toBeNull();
   });
 
   test("a database failure rolls the whitelist entry back", async () => {
@@ -213,7 +213,7 @@ describe("commitRegistration", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.stage).toBe("database");
     expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistAddJava", "whitelistRemoveJava"]);
-    expect(repos.getRegistration(GUILD, USER)).toBeNull();
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).toBeNull();
     expect(log.lines.some((l) => l.includes("registration insert failed"))).toBe(true);
   });
 
@@ -238,11 +238,12 @@ describe("unregister", () => {
       guildId: GUILD,
       userId: USER,
       actorId: USER,
+      edition: "JAVA",
       reason: "본인 요청",
     });
     expect(result.ok).toBe(true);
     expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistRemoveJava"]);
-    expect(repos.getRegistration(GUILD, USER)).toBeNull();
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).toBeNull();
     expect(repos.listAudit(GUILD, 10)[0]?.action).toBe("UNREGISTER");
     expect(sent).toHaveLength(1);
   });
@@ -260,11 +261,12 @@ describe("unregister", () => {
       guildId: GUILD,
       userId: USER,
       actorId: USER,
+      edition: "JAVA",
       reason: "본인 요청",
     });
     expect(result.ok).toBe(false);
     expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistRemoveJava", "whitelistAddJava"]);
-    expect(repos.getRegistration(GUILD, USER)).not.toBeNull();
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).not.toBeNull();
     expect(log.lines.some((l) => l.includes("registration delete failed"))).toBe(true);
   });
 
@@ -274,6 +276,7 @@ describe("unregister", () => {
       guildId: GUILD,
       userId: USER,
       actorId: USER,
+      edition: "JAVA",
       reason: "본인 요청",
     });
     expect(result.ok).toBe(false);
@@ -281,7 +284,7 @@ describe("unregister", () => {
     expect(bridge.calls).toHaveLength(0);
   });
 
-  test("bedrock candidates are removed through the bedrock operation", async () => {
+  test("bedrock links are removed without changing the whitelist", async () => {
     const { services, repos, bridge } = createTestServices({
       bridge: createFakeBridge(),
       limiter: createRateLimiter(10, 6_000),
@@ -299,11 +302,11 @@ describe("unregister", () => {
       guildId: GUILD,
       userId: USER,
       actorId: USER,
+      edition: "BEDROCK",
       reason: "본인 요청",
     });
     expect(result.ok).toBe(true);
-    expect(bridge.calls.map((c) => c.op)).toEqual(["whitelistRemoveBedrock"]);
-    expect(bridge.calls[0]?.payload.gamertag).toBe("Bedrock Kid");
-    expect(bridge.calls[0]?.payload.xuid).toBe(BEDROCK_XUID);
+    expect(bridge.calls).toHaveLength(0);
+    expect(repos.getRegistration(GUILD, USER, "BEDROCK")).toBeNull();
   });
 });

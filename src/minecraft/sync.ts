@@ -16,12 +16,6 @@ export interface SyncResult {
 }
 
 function candidateFromEntry(entry: WhitelistEntry): IdentityCandidate | null {
-  const bedrock = isBedrockUuid(entry.uuid) || entry.name.startsWith(".");
-  if (bedrock) {
-    const username = entry.name.startsWith(".") ? entry.name.slice(1) : entry.name;
-    if (!username || username.length > 16) return null;
-    return { edition: "BEDROCK", uuid: entry.uuid, username, xuid: null };
-  }
   if (!/^[A-Za-z0-9_]{3,16}$/.test(entry.name)) return null;
   return { edition: "JAVA", uuid: entry.uuid, username: entry.name, xuid: null };
 }
@@ -31,7 +25,7 @@ function describe(entry: WhitelistEntry): string {
 }
 
 /**
- * Reconciles the Discord registry (source of truth) with the Minecraft
+ * Reconciles Java registrations (source of truth) with the Minecraft
  * whitelist: missing entries are added, whitelist-only entries are removed.
  */
 export async function syncWhitelist(services: Services, guildId: string): Promise<SyncResult> {
@@ -47,13 +41,14 @@ export async function syncWhitelist(services: Services, guildId: string): Promis
 
   let entries: WhitelistEntry[];
   try {
-    entries = await services.bridge.getWhitelist();
+    entries = (await services.bridge.getWhitelist()).filter((entry) =>
+      !isBedrockUuid(entry.uuid) && !entry.name.startsWith("."));
   } catch (err) {
     const message = err instanceof BridgeError ? err.message : "Minecraft 서버와 연결할 수 없습니다.";
     return { ...result, ok: false, reason: message };
   }
 
-  const registrations = services.repos.listRegistrations(guildId);
+  const registrations = services.repos.listRegistrations(guildId).filter((reg) => reg.minecraftEdition === "JAVA");
   const byUuid = new Map(entries.map((entry) => [entry.uuid.toLowerCase(), entry]));
   const registrationUuids = new Set(registrations.map((r) => r.minecraftUuid.toLowerCase()));
 
@@ -63,10 +58,7 @@ export async function syncWhitelist(services: Services, guildId: string): Promis
       continue;
     }
     try {
-      const response =
-        reg.minecraftEdition === "JAVA"
-          ? await services.bridge.addJava(reg.minecraftUuid, reg.minecraftUsername)
-          : await services.bridge.addBedrock(reg.minecraftUsername);
+      const response = await services.bridge.addJava(reg.minecraftUuid, reg.minecraftUsername);
       if (response.applied) {
         result.added += 1;
         result.addedEntries.push(`${reg.minecraftUsername} (${reg.minecraftEdition})`);
@@ -88,10 +80,7 @@ export async function syncWhitelist(services: Services, guildId: string): Promis
       continue;
     }
     try {
-      const response =
-        candidate.edition === "JAVA"
-          ? await services.bridge.removeJava(candidate.uuid, candidate.username)
-          : await services.bridge.removeBedrock(candidate.username);
+      const response = await services.bridge.removeJava(candidate.uuid, candidate.username);
       if (response.applied) {
         result.removed += 1;
         result.removedEntries.push(describe(entry));

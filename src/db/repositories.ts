@@ -29,7 +29,7 @@ export interface AuditEntry {
 }
 
 export interface Repositories {
-  getRegistration(guildId: string, discordUserId: string): Registration | null;
+  getRegistration(guildId: string, discordUserId: string, edition: Edition): Registration | null;
   findRegistrationByUuid(guildId: string, minecraftUuid: string): Registration | null;
   /** Cross-guild lookup used by the event router. */
   findRegistrationsByUuid(minecraftUuid: string): Registration[];
@@ -37,7 +37,7 @@ export interface Repositories {
   countRegistrations(guildId: string): number;
   insertRegistration(reg: Registration): void;
   updateRegistrationDisplay(guildId: string, discordUserId: string, displayName: string, at: number): void;
-  deleteRegistration(guildId: string, discordUserId: string): boolean;
+  deleteRegistration(guildId: string, discordUserId: string, edition: Edition): boolean;
   getLogChannel(guildId: string): LogChannel | null;
   listConfiguredLogGuilds(): string[];
   setLogChannel(guildId: string, channelId: string, at: number): void;
@@ -72,12 +72,12 @@ function toRegistration(row: RegistrationRow): Registration {
 
 export function createRepositories(db: Database): Repositories {
   return {
-    getRegistration(guildId, discordUserId) {
+    getRegistration(guildId, discordUserId, edition) {
       const row = db
-        .query<RegistrationRow, [string, string]>(
-          `SELECT * FROM minecraft_registrations WHERE guild_id = ? AND discord_user_id = ?`,
+        .query<RegistrationRow, [string, string, Edition]>(
+          `SELECT * FROM minecraft_registrations WHERE guild_id = ? AND discord_user_id = ? AND minecraft_edition = ?`,
         )
-        .get(guildId, discordUserId);
+        .get(guildId, discordUserId, edition);
       return row ? toRegistration(row) : null;
     },
 
@@ -142,10 +142,10 @@ export function createRepositories(db: Database): Repositories {
       ).run(displayName, at, guildId, discordUserId);
     },
 
-    deleteRegistration(guildId, discordUserId) {
+    deleteRegistration(guildId, discordUserId, edition) {
       const res = db
-        .query(`DELETE FROM minecraft_registrations WHERE guild_id = ? AND discord_user_id = ?`)
-        .run(guildId, discordUserId);
+        .query(`DELETE FROM minecraft_registrations WHERE guild_id = ? AND discord_user_id = ? AND minecraft_edition = ?`)
+        .run(guildId, discordUserId, edition);
       return res.changes > 0;
     },
 

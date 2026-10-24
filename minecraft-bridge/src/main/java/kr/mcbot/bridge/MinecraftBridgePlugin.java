@@ -17,6 +17,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -86,7 +87,9 @@ public final class MinecraftBridgePlugin extends JavaPlugin {
         }
 
         DeathCounter deathCounter = new DeathCounter(statsDir);
-        getServer().getPluginManager().registerEvents(new ConnectionListener(publisher, deathCounter), this);
+        getServer().getPluginManager().registerEvents(new ConnectionListener(publisher, deathCounter,
+                getServer().getPluginManager().isPluginEnabled("floodgate")
+                        ? FloodgateApi.getInstance()::isFloodgatePlayer : uuid -> false), this);
         getServer().getPluginManager().registerEvents(new DeathListener(publisher, deathCounter), this);
         getServer().getPluginManager().registerEvents(new AdvancementListener(publisher), this);
         getServer().getPluginManager().registerEvents(new ChatListener(publisher), this);

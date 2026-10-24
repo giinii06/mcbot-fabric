@@ -38,6 +38,7 @@ export type CommitResult =
 export interface UnregisterInput {
   guildId: string;
   userId: string;
+  edition: Edition;
   actorId: string;
   forced?: boolean;
   reason: string;
@@ -82,15 +83,15 @@ export async function prepareRegistration(services: Services, input: PrepareInpu
     };
   }
 
-  const existing = services.repos.getRegistration(input.guildId, input.userId);
-  if (existing) {
+  const candidates = services.identity.candidates(identity).filter((candidate) =>
+    !services.repos.getRegistration(input.guildId, input.userId, candidate.edition));
+  if (candidates.length === 0) {
     return {
       ok: false,
-      reason: `이미 등록되어 있습니다. (현재: ${existing.minecraftUsername} / ${existing.minecraftEdition})`,
+      reason: "해당 에디션의 계정이 이미 등록되어 있습니다. 변경하려면 해당 에디션의 등록을 먼저 해제해 주세요.",
     };
   }
 
-  const candidates = services.identity.candidates(identity);
   for (const candidate of candidates) {
     const conflict = services.repos.findRegistrationByUuid(input.guildId, candidate.uuid);
     if (conflict && conflict.discordUserId !== input.userId) {
@@ -101,15 +102,13 @@ export async function prepareRegistration(services: Services, input: PrepareInpu
   return { ok: true, identity, candidates };
 }
 
+// Bedrock registration links a Discord name; its login bypasses the whitelist.
 export async function whitelistAdd(
   services: Services,
   candidate: Pick<IdentityCandidate, "edition" | "uuid" | "username" | "xuid">,
 ): Promise<{ applied: boolean; reason?: string }> {
-  const bridge = services.bridge;
-  const response =
-    candidate.edition === "JAVA"
-      ? await bridge.addJava(candidate.uuid, candidate.username)
-      : await bridge.addBedrock(candidate.username, candidate.xuid ?? undefined);
+  if (candidate.edition === "BEDROCK") return { applied: true };
+  const response = await services.bridge.addJava(candidate.uuid, candidate.username);
   return { applied: Boolean(response.applied), reason: response.reason ?? undefined };
 }
 
@@ -117,11 +116,8 @@ export async function whitelistRemove(
   services: Services,
   candidate: Pick<IdentityCandidate, "edition" | "uuid" | "username" | "xuid">,
 ): Promise<{ applied: boolean; reason?: string }> {
-  const bridge = services.bridge;
-  const response =
-    candidate.edition === "JAVA"
-      ? await bridge.removeJava(candidate.uuid, candidate.username)
-      : await bridge.removeBedrock(candidate.username, candidate.xuid ?? undefined);
+  if (candidate.edition === "BEDROCK") return { applied: true };
+  const response = await services.bridge.removeJava(candidate.uuid, candidate.username);
   return { applied: Boolean(response.applied), reason: response.reason ?? undefined };
 }
 
@@ -136,14 +132,14 @@ function candidateFromRegistration(reg: Registration): IdentityCandidate {
 }
 
 /**
- * Step 2 of registration: whitelist first, database second. A database failure
- * rolls the whitelist entry back so the two stores never disagree.
+ * Java registration updates the whitelist before saving, with rollback on failure.
+ * Bedrock registration only saves the Discord link.
  */
 export async function commitRegistration(services: Services, input: CommitInput): Promise<CommitResult> {
   const { guildId, userId, candidate } = input;
   const now = services.now();
 
-  const existingUser = services.repos.getRegistration(guildId, userId);
+  const existingUser = services.repos.getRegistration(guildId, userId, candidate.edition);
   if (existingUser) {
     return { ok: false, reason: "이미 등록되어 있습니다.", stage: "duplicate" };
   }
@@ -222,11 +218,11 @@ export async function commitRegistration(services: Services, input: CommitInput)
 }
 
 /**
- * Unregister: whitelist removal first, then the database row. A database
- * failure re-adds the whitelist entry (symmetric rollback).
+ * Java unregister removes the whitelist entry before deleting, with rollback on failure.
+ * Bedrock unregister only deletes the Discord link.
  */
 export async function unregister(services: Services, input: UnregisterInput): Promise<UnregisterResult> {
-  const registration = services.repos.getRegistration(input.guildId, input.userId);
+  const registration = services.repos.getRegistration(input.guildId, input.userId, input.edition);
   if (!registration) {
     return { ok: false, reason: "등록된 Minecraft 계정이 없습니다." };
   }
@@ -247,7 +243,7 @@ export async function unregister(services: Services, input: UnregisterInput): Pr
 
   let deleted = false;
   try {
-    deleted = services.repos.deleteRegistration(input.guildId, input.userId);
+    deleted = services.repos.deleteRegistration(input.guildId, input.userId, input.edition);
   } catch (err) {
     services.log.error("registration delete failed", {
       guildId: input.guildId,

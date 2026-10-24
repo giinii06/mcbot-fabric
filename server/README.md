@@ -32,7 +32,7 @@ Docker가 없을 때 임의 원격 설치 스크립트를 실행하지 않으며
 | CPU | 게임 상한 2.0, 백업 0.25·낮은 CPU shares |
 | 백업 메모리 | 512m |
 | 게임 | survival, peaceful(고정), PvP 켬, 최대 접속 설정 1000명 |
-| 인증·접속 제한 | online-mode, white-list, enforce-whitelist 모두 true |
+| 인증·접속 제한 | online-mode, white-list, enforce-whitelist 모두 true; Floodgate 인증 Bedrock 접속만 화이트리스트 예외 |
 | 시야 / 시뮬레이션 | 6 / 4 |
 | GC | Java 25 기본 G1, Aikar/MeowIce 플래그 없음 |
 | 공개 포트 | Java TCP 25565, Bedrock TCP/UDP 19132; RCON 25575·브릿지 8765는 호스트 미게시 |
@@ -71,6 +71,9 @@ cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
 
 봇이 화이트리스트를 관리하므로 `WHITELIST` 목록 환경변수를 추가하지 마세요.
 Discord에서 Java는 `/유저등록`, Bedrock은 `/유저등록베드락`을 사용합니다.
+Bedrock은 Discord 등록 없이 접속할 수 있으며, 등록은 로그에 표시할 Discord 이름을 연결하는 용도입니다.
+MinecraftBridge가 Floodgate API로 인증된 Bedrock 접속의 화이트리스트 검사만 예외 처리합니다.
+Java 접속의 화이트리스트와 양쪽의 차단·정원 제한은 유지합니다. 브릿지가 비활성화되면 예외도 적용되지 않습니다.
 봇 없이 운영할 때만 `./mc.sh command whitelist add Java이름`으로 추가합니다.
 Geyser 2.12.0 b1268·Floodgate 2.2.5 b141을 사용합니다. Java 26.3은 Geyser가 직접
 지원하므로 ViaVersion은 필요하지 않습니다. Bedrock은 26.50~26.52 클라이언트를 사용하세요.
@@ -82,7 +85,7 @@ JAR는 고정 URL·SHA256으로 검증하며 기존 플러그인 설정·키는 
 
 Geyser는 NetherNet을 사용하므로 호스트 및 OCI NSG/Security List에서 **TCP와 UDP 19132**를
 모두 허용해야 합니다. `ENFORCE_SECURE_PROFILE=false`로 Bedrock 채팅을 허용하며,
-Java 정품 인증(`online-mode=true`)과 화이트리스트는 유지합니다.
+Java 정품 인증(`online-mode=true`)과 Java 접속의 화이트리스트는 유지합니다.
 Floodgate Global Linking을 활성화합니다. Java 캐릭터를 Bedrock에서도 쓰려면
 [공식 연결 서버](https://geysermc.org/wiki/floodgate/linking/)에서 두 계정으로 접속하여
 `/linkaccount`와 반대쪽 계정의 `/linkaccount <코드>`로 연결한 뒤 이 서버에 재접속합니다.
@@ -110,6 +113,15 @@ ACME 계정은 `secrets/letsencrypt/`, 서비스·타이머는 호스트 `/etc/s
 공인 IP가 바뀌면 스크립트의 IP와 인증서를 함께 갱신해야 합니다.
 
 ## 운영·성능 측정
+
+Bedrock의 간헐적 끊김을 줄이기 위한 시험 설정은 `bedrock/geyser.yml`에 있습니다.
+`gameplay.command-suggestions=false`는 명령창을 처음 열 때 생길 수 있는 멈춤을 피하는 대신 자동완성을 끕니다.
+`advanced.bedrock.compression-level=4`는 기본값 6보다 압축 CPU 비용을 줄이는 대신 전송량이 늘어납니다.
+기존 설치에는 템플릿이 자동 복사되지 않으므로 `data/plugins/Geyser-Spigot/config.yml`에도 적용해야 합니다.
+적용 전 설정을 백업하고 `./mc.sh command geyser reload`로 반영합니다. 이때 Bedrock 접속자는 재접속해야 합니다.
+체감 개선 여부는 같은 기기·네트워크에서 재접속해 비교해야 하며, 서버 TPS가 정상이어도 기기·네트워크 지연은 남을 수 있습니다.
+근거: [Geyser 문제 해결](https://geysermc.org/wiki/geyser/common-issues/),
+[공식 설정 정의](https://github.com/GeyserMC/Geyser/blob/d14f204635dceb37f2bfaf87cc3b733bc4f1e1eb/core/src/main/java/org/geysermc/geyser/configuration/GeyserConfig.java).
 
 ```bash
 ./mc.sh start

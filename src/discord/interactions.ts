@@ -99,7 +99,7 @@ export function createInteractionRouter(deps: RouterDeps): (interaction: Interac
           embeds: [
             successEmbed(
               "등록 완료",
-              `**${pending.displayName}** → \`${result.registration.minecraftUsername}\` (${result.registration.minecraftEdition}) 연결이 완료되었습니다. 화이트리스트에 추가되었습니다.`,
+              `**${pending.displayName}** → \`${result.registration.minecraftUsername}\` (${result.registration.minecraftEdition}) 연결이 완료되었습니다.`,
             ),
           ],
           components: [],

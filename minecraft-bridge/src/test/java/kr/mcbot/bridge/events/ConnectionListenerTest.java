@@ -3,6 +3,7 @@ package kr.mcbot.bridge.events;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 import com.destroystokyo.paper.profile.PlayerProfile;
+import com.destroystokyo.paper.event.profile.ProfileWhitelistVerifyEvent;
 import kr.mcbot.bridge.publish.EventPublisher;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class ConnectionListenerTest {
         var publisher = new EventPublisher("http://127.0.0.1:" + server.getAddress().getPort(),
                 "test-secret-123456", 8, 1, 1000, 1000, 0, Logger.getLogger("test"));
         try {
-            var listener = new ConnectionListener(publisher, null);
+            var listener = new ConnectionListener(publisher, null, uuid -> false);
             var event = login(".Bedrock_Kid", "00000000-0000-0000-0009-01fb54b26482");
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_WHITELIST, net.kyori.adventure.text.Component.text("not whitelisted"));
             listener.onPreLogin(event);
@@ -57,5 +58,27 @@ class ConnectionListenerTest {
             publisher.shutdown(1000);
             server.stop(0);
         }
+    }
+
+    @Test
+    void onlyAuthenticatedFloodgatePlayersBypassWhitelist() {
+        var bedrock = login(".Bedrock_Kid", "00000000-0000-0000-0009-01fb54b26482");
+        var linked = login("LinkedJava", "f642a5e3-d12f-4a7d-9c96-aef87fcf92be");
+        var java = login("Notch", "069a79f4-44e9-4726-a5be-ca90e38aaf51");
+        var spoofed = login(".Fake", "00000000-0000-0000-0000-000000000001");
+        var listener = new ConnectionListener(null, null,
+                uuid -> uuid.equals(bedrock.getUniqueId()) || uuid.equals(linked.getUniqueId()));
+        for (var login : new AsyncPlayerPreLoginEvent[]{bedrock, linked, java, spoofed}) {
+            var event = new ProfileWhitelistVerifyEvent(login.getPlayerProfile(), true, false, false, null);
+            listener.onWhitelistVerify(event);
+            assertEquals(login == bedrock || login == linked, event.isWhitelisted());
+        }
+        var allowed = new ProfileWhitelistVerifyEvent(java.getPlayerProfile(), true, true, false, null);
+        listener.onWhitelistVerify(allowed);
+        assertTrue(allowed.isWhitelisted());
+        var noFloodgate = new ConnectionListener(null, null, uuid -> false);
+        var denied = new ProfileWhitelistVerifyEvent(bedrock.getPlayerProfile(), true, false, false, null);
+        noFloodgate.onWhitelistVerify(denied);
+        assertFalse(denied.isWhitelisted());
     }
 }

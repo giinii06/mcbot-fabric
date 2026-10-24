@@ -2,7 +2,8 @@ import { ApplicationCommandOptionType } from "discord.js";
 import { unregister } from "../registration";
 import { playerLabel } from "../embeds";
 import { sendError, sendSuccess } from "../../discord/replies";
-import type { CommandModule } from "./types";
+import { editionOption, type CommandModule } from "./types";
+import type { Edition } from "../../db/repositories";
 
 export const forceUnregisterCommand: CommandModule = {
   name: "유저강제해제",
@@ -10,6 +11,7 @@ export const forceUnregisterCommand: CommandModule = {
   admin: true,
   ephemeral: true,
   options: [
+    editionOption,
     {
       type: ApplicationCommandOptionType.User,
       name: "유저",
@@ -27,7 +29,8 @@ export const forceUnregisterCommand: CommandModule = {
     }
 
     const target = interaction.options.getUser("유저", true);
-    const registration = services.repos.getRegistration(guildId, target.id);
+    const edition = interaction.options.getString("에디션", true) as Edition;
+    const registration = services.repos.getRegistration(guildId, target.id, edition);
     if (!registration) {
       await sendError(interaction, "해당 사용자는 등록된 Minecraft 계정이 없습니다.");
       return;
@@ -39,6 +42,7 @@ export const forceUnregisterCommand: CommandModule = {
     const result = await unregister(services, {
       guildId,
       userId: target.id,
+      edition,
       actorId: interaction.user.id,
       forced: true,
       reason: "관리자 강제 해제",

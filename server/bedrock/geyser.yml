@@ -11,4 +11,11 @@ bedrock:
   #       private-key: https/privkey.pem
 java:
   auth-type: floodgate
+gameplay:
+  # Avoid the first-command UI freeze on Bedrock clients.
+  command-suggestions: false
+advanced:
+  bedrock:
+    # Reduce compression CPU cost; uses more bandwidth than the default 6.
+    compression-level: 4
 config-version: 11
