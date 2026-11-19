@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,11 @@ type mod struct {
 }
 
 func main() {
+	macDialog := runtime.GOOS == "darwin" && !(len(os.Args) == 2 && os.Args[1] == "--cli")
+	if macDialog {
+		_ = exec.Command("/usr/bin/osascript", "-e",
+			`display notification "모드를 설치하는 중입니다. 완료 화면이 표시될 때까지 기다려 주세요." with title "Cobblemon Server"`).Run()
+	}
 	err := run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Installation failed:", err)
@@ -44,7 +50,18 @@ func main() {
 		fmt.Println("Installed. Open Minecraft Launcher > Java Edition > Installations > Cobblemon Server.")
 		fmt.Println("Click Play, then select Cobblemon Server in Multiplayer.")
 	}
-	if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+	if macDialog {
+		message := "설치가 완료되었습니다. Minecraft Launcher의 설치 설정에서 Cobblemon Server를 실행한 뒤 멀티플레이에서 서버에 접속하세요."
+		if err != nil {
+			message = "설치에 실패했습니다.\n\n" + err.Error()
+		}
+		dialog := `on run argv
+			display dialog (item 1 of argv) with title "Cobblemon Server" buttons {"확인"} default button 1
+		end run`
+		if dialogErr := exec.Command("/usr/bin/osascript", "-e", dialog, message).Run(); dialogErr != nil {
+			fmt.Fprintln(os.Stderr, dialogErr)
+		}
+	} else if info, err := os.Stdin.Stat(); runtime.GOOS == "windows" && err == nil && info.Mode()&os.ModeCharDevice != 0 {
 		fmt.Print("Press Enter to close.")
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 	}
@@ -54,6 +71,23 @@ func main() {
 }
 
 func run() error {
+	if runtime.GOOS == "darwin" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		err = exec.Command("/usr/bin/pgrep", "-U", strconv.Itoa(os.Getuid()), "-if",
+			`Minecraft( Launcher)?\.app/Contents/|(^|/)minecraft-launcher( |$)`).Run()
+		if err == nil {
+			return errors.New("Minecraft Launcher를 완전히 종료한 다음 설치 앱을 다시 여세요.")
+		}
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+			return fmt.Errorf("check Minecraft Launcher: %w", err)
+		}
+		return install(filepath.Join(home, "Library", "Application Support", "minecraft"), serverAddress)
+	}
+
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		return errors.New("APPDATA is missing")

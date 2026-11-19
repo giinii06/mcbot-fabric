@@ -1,7 +1,19 @@
 $ErrorActionPreference = 'Stop'
-$env:APPDATA = Join-Path $env:RUNNER_TEMP 'mcbot-client-smoke'
-$root = New-Item -ItemType Directory -Path (Join-Path $env:APPDATA '.minecraft') -Force
 $launcherFiles = @('launcher_profiles.json', 'launcher_profiles_microsoft_store.json')
+$homeDir = Join-Path $env:RUNNER_TEMP 'mcbot-client-smoke'
+if ($IsMacOS) {
+    $env:HOME = $homeDir
+    $rootPath = Join-Path $homeDir 'Library/Application Support/minecraft'
+    $installer = './dist/Cobblemon Setup.app/Contents/MacOS/CobblemonSetup'
+    $installerArgs = @('--cli')
+    $launcherFiles = @('launcher_profiles.json')
+} else {
+    $env:APPDATA = $homeDir
+    $rootPath = Join-Path $homeDir '.minecraft'
+    $installer = './MCBot-Cobblemon-Setup.exe'
+    $installerArgs = @()
+}
+$root = New-Item -ItemType Directory -Path $rootPath -Force
 foreach ($file in $launcherFiles) {
     '{"profiles":{"vanilla":{"name":"Keep me"}},"settings":{"keep":true}}' |
         Set-Content (Join-Path $root $file)
@@ -10,7 +22,7 @@ foreach ($file in $launcherFiles) {
 $lock = Get-Content server/mods.lock.json -Raw | ConvertFrom-Json
 $versionId = "fabric-loader-$($lock.minecraft.loaderVersion)-$($lock.minecraft.version)"
 foreach ($attempt in 1..2) {
-    '' | & ./MCBot-Cobblemon-Setup.exe
+    '' | & $installer @installerArgs
     if ($LASTEXITCODE -ne 0) { throw "Installer failed on attempt $attempt" }
     foreach ($file in $launcherFiles) {
         $launcher = Get-Content (Join-Path $root $file) -Raw | ConvertFrom-Json

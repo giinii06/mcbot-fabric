@@ -78,14 +78,18 @@ OCI에서는 NSG/Security List ingress를 **TCP 25565**만 열고 SSH 규칙을 
 
 ### 게임 클라이언트 (접속하는 사람)
 
-#### Windows x64에서 설치하기
+#### Windows와 macOS에서 설치하기
 
 1. 공식 Minecraft Launcher에서 Java Edition에 로그인한 뒤 런처를 닫으세요.
-2. [GitHub Releases](https://github.com/giinii06/mcbot-fabric/releases)에서 `MCBot-Cobblemon-Setup.exe`를 받아 한 번 실행하세요.
+2. [GitHub Releases](https://github.com/giinii06/mcbot-fabric/releases)에서 운영체제에 맞는 설치기를 받으세요.
+   - **Windows x64**에서는 `MCBot-Cobblemon-Setup.exe`를 실행하세요.
+   - **macOS 11 이상**에서는 `MCBot-Cobblemon-Setup-macOS.zip`을 풀고 `Cobblemon Setup.app`을 더블클릭하세요. Apple Silicon과 Intel을 모두 지원합니다.
 3. 런처를 다시 열고 **Java Edition → 설치 설정 → Cobblemon Server**에서 실행하세요.
 4. 게임의 **멀티플레이**에서 저장된 **Cobblemon Server**에 접속하세요.
 
 설치기는 서버와 같은 Fabric Loader, Fabric API, Cobblemon을 전용 게임 폴더에 설정합니다. 저장소가 비공개이므로 GitHub 다운로드에는 접근 권한이 필요합니다. 서버의 화이트리스트는 그대로 적용됩니다.
+
+macOS 앱은 Apple 공증을 받지 않았습니다. macOS가 첫 실행을 막으면 [Apple의 앱 열기 안내](https://support.apple.com/ko-kr/102445)를 참고하세요.
 
 새 설치기를 배포하려면 저장소 변수 `MINECRAFT_SERVER_ADDRESS`에 공개 Java 접속 주소를 `호스트:포트` 형식으로 설정한 뒤 `client-v*` 태그를 푸시하세요. 같은 모드 목록으로 다시 설치하면 기존 서버 목록을 유지합니다.
 
