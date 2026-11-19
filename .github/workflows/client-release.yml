@@ -70,7 +70,7 @@ jobs:
           app='dist/Cobblemon Setup.app'
           plutil -lint "$app/Contents/Info.plist"
           codesign --verify --strict "$app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/CobblemonSetup"
+          lipo "$app/Contents/MacOS/CobblemonSetup" -verify_arch arm64 x86_64
           pwsh -NoProfile -File client/smoke-test.ps1
 
       - uses: actions/upload-artifact@v4
