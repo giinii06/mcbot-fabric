@@ -25,34 +25,48 @@ describe("command registry", () => {
   });
 });
 
-for (const [name, edition] of [["유저등록", "JAVA"], ["유저등록베드락", "BEDROCK"]] as const) {
-  test(`${name} queries only ${edition} and opens its confirmation`, async () => {
-    const { services, db, identityFetches } = createTestServices({ identity: {
-      fetchImpl: async (url) => String(url).includes("mojang")
-        ? jsonResponse({ id: JAVA_UUID.replaceAll("-", ""), name: "Notch" })
-        : jsonResponse({ xuid: "2533274790395904" }),
-    } });
-    let reply: unknown;
-    try {
-      const interaction = {
-        commandName: name, guildId: GUILD, user: { id: USER, username: "tester" },
-        inCachedGuild: () => false,
-        options: { getString: () => "Notch" },
-        deferReply: async () => {},
-        editReply: async (value: unknown) => { reply = value; },
-      } as unknown as CommandContext["interaction"];
-      await commandRegistry.get(name)!.execute({ interaction, services });
-      expect(identityFetches).toHaveLength(1);
-      expect(identityFetches[0]?.includes(edition === "JAVA" ? "mojang" : "geysermc")).toBe(true);
-      expect(JSON.stringify(reply)).toContain("mcreg:go:");
-      const resolved = await services.identity.resolve("Notch", edition);
-      expect(resolved.status).toBe(edition);
-      const other = await services.identity.resolve("Notch", edition === "JAVA" ? "BEDROCK" : "JAVA");
-      expect(other.status).not.toBe(edition);
-      expect(identityFetches).toHaveLength(2);
-    } finally { db.close(); }
-  });
-}
+test("유저등록 queries only Java and opens its confirmation", async () => {
+  const { services, db, identityFetches } = createTestServices({ identity: {
+    fetchImpl: async (url) => String(url).includes("mojang")
+      ? jsonResponse({ id: JAVA_UUID.replaceAll("-", ""), name: "Notch" })
+      : jsonResponse({}, 503),
+  } });
+  let reply: unknown;
+  try {
+    const interaction = {
+      commandName: "유저등록", guildId: GUILD, user: { id: USER, username: "tester" },
+      inCachedGuild: () => false,
+      options: { getString: () => "Notch" },
+      deferReply: async () => {},
+      editReply: async (value: unknown) => { reply = value; },
+    } as unknown as CommandContext["interaction"];
+    await commandRegistry.get("유저등록")!.execute({ interaction, services });
+    expect(identityFetches).toHaveLength(1);
+    expect(identityFetches[0]?.includes("mojang")).toBe(true);
+    expect(JSON.stringify(reply)).toContain("mcreg:go:");
+  } finally { db.close(); }
+});
+
+test("유저등록베드락 replies ephemerally as unsupported without an identity lookup", async () => {
+  const { services, db, identityFetches } = createTestServices();
+  let reply: { ephemeral?: boolean } | undefined;
+  try {
+    const interaction = {
+      commandName: "유저등록베드락", guildId: GUILD, user: { id: USER, username: "tester" },
+      inCachedGuild: () => false,
+      deferred: false,
+      replied: false,
+      options: { getString: () => "Bedrock Kid" },
+      deferReply: async () => { throw new Error("유저등록베드락 must not defer"); },
+      reply: async (value: { ephemeral?: boolean }) => { reply = value; },
+    } as unknown as CommandContext["interaction"];
+    await commandRegistry.get("유저등록베드락")!.execute({ interaction, services });
+    expect(identityFetches).toHaveLength(0);
+    expect(reply?.ephemeral).toBe(true);
+    expect(JSON.stringify(reply)).toContain("Java");
+    expect(JSON.stringify(reply)).toContain("지원하지 않습니다");
+  } finally { db.close(); }
+});
 
 describe("toApplicationCommand", () => {
   test("admin commands require the Administrator permission bit", () => {

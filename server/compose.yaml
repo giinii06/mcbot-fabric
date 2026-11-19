@@ -1,39 +1,43 @@
 # =============================================================================
-# Minecraft Java survival server (managed by server/install.sh)
-# Paper 26.3 build #205 / Java 25 / MinecraftBridge + optional Chunky
+# Minecraft Java server: Fabric + Cobblemon 1.8.4 (Minecraft 1.21.1)
 #
 # 컨테이너: minecraft (게임 서버), minecraft-backup (사이드카 백업)
-# 포트: TCP 25565 (Java), TCP/UDP 19132 (Bedrock)
-# 이 디렉터리(server/)만 다른 호스트에 복사해도 그대로 기동됩니다.
-# 봇과 함께 쓸 때는 루트의 mcbot compose와 외부 네트워크 mc-discord를 공유합니다.
+# 공개 포트: TCP 25565만. RCON 25575, 브릿지 8765, Bedrock 19132는 게시하지 않음.
+# 데이터: ./data-cobblemon (기존 Paper ./data/는 절대 건드리지 않음)
+# 모드: ./mods.lock.json 고정 버전 + 해시, ./mc.sh install-mods|verify-mods
+# 봇과 함께 쓸 때는 루트 compose와 외부 네트워크 mc-discord를 공유합니다.
 # =============================================================================
 name: minecraft
 
 services:
   minecraft:
-    image: itzg/minecraft-server:java25
+    # Pin both tag and manifest digest; do not use a floating tag.
+    image: itzg/minecraft-server:2026.11.0-java21@sha256:5fbaa7d1eb8d5575cd009c247f872d1fd6b5cd0f096e8ea173648cd4e43d52d4
     container_name: minecraft
     restart: unless-stopped
     stop_grace_period: 120s
     tty: true
     stdin_open: true
     ports:
+      # Java only. Never publish 19132 (Bedrock), 25575 (RCON) or 8765 (bridge).
       - "${JAVA_PORT:-25565}:25565/tcp"
-      - "19132:19132/tcp"
-      - "19132:19132/udp"
     environment:
       EULA: "TRUE"
       TZ: ${TZ}
-      # 호스트 사용자와 파일 소유권 일치 (uid 1001)
+      # 호스트 사용자와 파일 소유권 일치
       UID: "${MC_UID}"
       GID: "${MC_GID}"
-      # VERSION + PAPER_BUILD are pinned; never select latest automatically.
-      TYPE: PAPER
+      # Fabric is installed by the image; loader/installer are pinned here.
+      TYPE: FABRIC
       VERSION: ${MC_VERSION:?Set MC_VERSION}
-      PAPER_BUILD: ${PAPER_BUILD:?Set PAPER_BUILD}
-      PAPER_DOWNLOAD_URL: ${PAPER_JAR_URL:?Set PAPER_JAR_URL}
+      FABRIC_LOADER_VERSION: ${FABRIC_LOADER_VERSION:?Set FABRIC_LOADER_VERSION}
+      FABRIC_LAUNCHER_VERSION: ${FABRIC_INSTALLER_VERSION:?Set FABRIC_INSTALLER_VERSION}
+      FABRIC_FORCE_REINSTALL: "false"
       SKIP_DOWNLOAD_DEFAULTS: "true"
-      # Java 25 default G1 GC, no speculative tuning flags.
+      # Mods are installed only by ./mc.sh install-mods from mods.lock.json.
+      # Do NOT set MODRINTH_PROJECTS: it prunes older files and can delete
+      # manually managed jars.
+      # Java 21 defaults, no speculative GC flags.
       INIT_MEMORY: ${JVM_INIT_MEMORY}
       MAX_MEMORY: ${JVM_MAX_MEMORY}
       USE_AIKAR_FLAGS: "false"
@@ -41,6 +45,12 @@ services:
       # --- RCON (비밀번호는 secrets/rcon_password 파일, compose에는 없음) ---
       ENABLE_RCON: "true"
       RCON_PASSWORD_FILE: /run/secrets/rcon_password
+      # keepInventory in every dimension, applied after the server is ready.
+      # /gamerule is idempotent, so restarts and existing worlds are safe.
+      RCON_CMDS_STARTUP: |-
+        execute in minecraft:overworld run gamerule keepInventory true
+        execute in minecraft:the_nether run gamerule keepInventory true
+        execute in minecraft:the_end run gamerule keepInventory true
       # --- server.properties (online-mode 유지) ---
       ONLINE_MODE: "true"
       ENFORCE_SECURE_PROFILE: "false"
@@ -48,17 +58,19 @@ services:
       ENABLE_WHITELIST: "true"
       ENFORCE_WHITELIST: "true"
       MODE: survival
-      DIFFICULTY: peaceful
+      DIFFICULTY: ${DIFFICULTY:-easy}
       PVP: "true"
       VIEW_DISTANCE: "${VIEW_DISTANCE:-6}"
       SIMULATION_DISTANCE: "${SIMULATION_DISTANCE:-4}"
       MAX_PLAYERS: "${MAX_PLAYERS:-1000}"
       SYNC_CHUNK_WRITES: "true"
-      PAUSE_WHEN_EMPTY_SECONDS: "0"
       USE_NATIVE_TRANSPORT: "true"
     volumes:
-      - ./data:/data
+      # Fabric + Cobblemon world, config and Cobblemon player data.
+      # The legacy Paper world at ./data must never be mounted here.
+      - ./data-cobblemon:/data
       - ./secrets/rcon_password:/run/secrets/rcon_password:ro
+      - ./secrets/bridge_secret:/run/secrets/bridge_secret:ro
     # 호스트 12GB / 2OCPU 중 일부만 사용 (기존 서비스 보호)
     mem_limit: 8g
     cpus: 2.0
@@ -72,7 +84,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 180s
+      start_period: 300s
     logging:
       driver: "json-file"
       options:
@@ -80,7 +92,7 @@ services:
         max-file: "5"
 
   minecraft-backup:
-    image: itzg/mc-backup
+    image: itzg/mc-backup:2026.11.0@sha256:a68dee00b2b56bd443bee7d310e5fc49e66682c0d1f4040cda6efa52d8c51df8
     container_name: minecraft-backup
     restart: unless-stopped
     depends_on:
@@ -93,7 +105,7 @@ services:
       RCON_PASSWORD_FILE: /run/secrets/rcon_password
       SRC_DIR: /data
       DEST_DIR: /backups
-      BACKUP_NAME: world
+      BACKUP_NAME: cobblemon
       BACKUP_METHOD: tar
       BACKUP_INTERVAL: ${BACKUP_INTERVAL}
       BACKUP_ON_STARTUP: "true"
@@ -103,14 +115,16 @@ services:
       TAR_COMPRESS_PARAMETERS: ${BACKUP_COMPRESS_ARGS}
       ENABLE_SAVE_ALL: "true"
       ENABLE_SYNC: "true"
+      # 모드 JAR은 mods.lock.json으로 재설치 가능하므로 제외한다.
+      # 월드·Cobblemon 플레이어 데이터·config는 모두 포함된다.
       EXCLUDES: ${BACKUP_EXCLUDES}
       PRE_SAVE_ALL_SCRIPT_FILE: /hooks/backup-space.sh
       POST_BACKUP_SCRIPT_FILE: /hooks/backup-verify.sh
       RCON_RETRIES: "5"
       RCON_RETRY_INTERVAL: "10s"
     volumes:
-      - ./data:/data:ro
-      - ./backups:/backups
+      - ./data-cobblemon:/data:ro
+      - ./backups-cobblemon:/backups
       - ./backup-space.sh:/hooks/backup-space.sh:ro
       - ./backup-verify.sh:/hooks/backup-verify.sh:ro
       - ./secrets/rcon_password:/run/secrets/rcon_password:ro
@@ -125,6 +139,6 @@ services:
         max-file: "3"
 
 networks:
-  # 봇과 플러그인의 전용망 (외부 네트워크)
+  # 봇과 브릿지의 전용망 (외부 네트워크)
   mc-discord:
     external: true

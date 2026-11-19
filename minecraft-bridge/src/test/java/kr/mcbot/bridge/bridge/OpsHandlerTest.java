@@ -1,182 +1,268 @@
 package kr.mcbot.bridge.bridge;
 
-import kr.mcbot.bridge.stats.PlaytimeService;
-import kr.mcbot.bridge.whitelist.WhitelistService;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Contract tests for the HTTP surface exposed to the Discord bot:
- * auth rejection, payload validation and the "no arbitrary command" rule.
- * Nothing here touches Bukkit - only operations that are safe off the main
- * thread are exercised.
+ * Wire contract of the bridge: auth, payload validation, the enumerated ops,
+ * Bedrock rejection and the server-thread timeout mapping. Uses a fake
+ * backend so no Minecraft server is needed.
  */
 class OpsHandlerTest {
 
     private static final String SECRET = "0123456789abcdef0123456789abcdef";
-    private static final String BEARER = "Bearer " + SECRET;
+    private static final String REQUEST_ID = "request-12345678";
+    private static final UUID UUID_A = UUID.fromString("069a79f4-44e9-4726-a5be-ca90e38aaf51");
 
-    @TempDir
-    Path tempDir;
-
+    private FakeBackend backend;
     private OpsHandler handler;
 
     @BeforeEach
-    void setUp() throws IOException {
-        Files.writeString(tempDir.resolve("whitelist.json"), """
-                [
-                  {"name":"Steve","uuid":"00000000-0000-0000-0000-000000000001"},
-                  {"name":".BedrockKid","uuid":"00000000-0000-0000-0009-01fb54b26482"},
-                  {"name":"Bad","uuid":"not-a-uuid"}
-                ]
-                """);
-        Path statsDir = Files.createDirectories(tempDir.resolve("world").resolve("stats"));
-        Files.writeString(statsDir.resolve("069a79f4-44e9-4726-a5be-ca90e38aaf51.json"), """
-                {"stats":{"minecraft:play_time": 72000}}
-                """);
-
-        WhitelistService whitelist = new WhitelistService(Logger.getLogger("test"), tempDir.toFile());
-        PlaytimeService playtime = new PlaytimeService(Logger.getLogger("test"), statsDir, 5000L, 16);
-        handler = new OpsHandler(null, whitelist, playtime, SECRET, "1.0.0", 4000L, Logger.getLogger("test"));
+    void setUp() {
+        backend = new FakeBackend();
+        handler = new OpsHandler(backend, SECRET, "1.1.0-test", LoggerFactory.getLogger("test"));
     }
 
-    // ------------------------------------------------------------------
-    // auth
-    // ------------------------------------------------------------------
+    private HttpResult post(String json, String auth) {
+        return handler.ops(json, auth, null);
+    }
 
-    @Test
-    void rejectsMissingOrWrongSecret() {
-        assertEquals(401, handler.ops(json("getStatus"), null, null).status());
-        assertEquals(401, handler.ops(json("getStatus"), "Bearer wrong", null).status());
-        assertEquals(401, handler.ops(json("getStatus"), null, "wrong").status());
-        assertEquals(401, handler.ops(json("getStatus"), "Basic " + SECRET, null).status());
-        assertEquals(401, handler.ops(json("getStatus"), "bearer", null).status());
-        assertEquals(401, handler.ops(json("getStatus"), "Bearer ", null).status());
+    private JsonObject body(HttpResult result) {
+        return JsonParser.parseString(result.body()).getAsJsonObject();
     }
 
     @Test
-    void acceptsBearerAndSecretHeader() {
-        assertEquals(200, handler.ops(json("getWhitelist"), BEARER, null).status());
-        assertEquals(200, handler.ops(json("getWhitelist"), null, SECRET).status());
-    }
-
-    // ------------------------------------------------------------------
-    // payload validation
-    // ------------------------------------------------------------------
-
-    @Test
-    void rejectsMalformedBodies() {
-        assertEquals(400, handler.ops("not json", BEARER, null).status());
-        assertEquals(400, handler.ops("[1,2,3]", BEARER, null).status());
-        assertEquals(400, handler.ops(null, BEARER, null).status());
-        assertEquals(400, handler.ops("{}", BEARER, null).status());
-    }
-
-    @Test
-    void rejectsArbitraryCommandOperations() {
-        assertEquals(400, handler.ops("""
-                {"op":"console.exec","requestId":"abcdefgh"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"minecraft/command","requestId":"abcdefgh","command":"stop"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"op give Notch","requestId":"abcdefgh"}
-                """, BEARER, null).status());
-    }
-
-    @Test
-    void rejectsBadRequestIds() {
-        assertEquals(400, handler.ops("""
-                {"op":"getStatus","requestId":"short"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"getStatus"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"getStatus","requestId":"bad id here"}
-                """, BEARER, null).status());
-    }
-
-    @Test
-    void rejectsInvalidWhitelistPayloadsBeforeTouchingTheServer() {
-        assertEquals(400, handler.ops("""
-                {"op":"whitelistAddJava","requestId":"abcdefgh","uuid":"nope","username":"Notch"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"whitelistAddJava","requestId":"abcdefgh",
-                 "uuid":"069a79f4-44e9-4726-a5be-ca90e38aaf51","username":"bad name"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"whitelistAddJava","requestId":"abcdefgh",
-                 "uuid":"069a79f4-44e9-4726-a5be-ca90e38aaf51","username":"Notch; op"}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"whitelistAddBedrock","requestId":"abcdefgh","gamertag":"\\"quoted\\""}
-                """, BEARER, null).status());
-        assertEquals(400, handler.ops("""
-                {"op":"whitelistAddBedrock","requestId":"abcdefgh","gamertag":"Kid","xuid":"abc"}
-                """, BEARER, null).status());
-    }
-
-    // ------------------------------------------------------------------
-    // safe read operations
-    // ------------------------------------------------------------------
-
-    @Test
-    void healthReportsPluginState() {
+    void healthDoesNotExposeSecrets() {
         HttpResult result = handler.health();
         assertEquals(200, result.status());
-        assertTrue(result.body().contains("\"ok\":true"));
-        assertTrue(result.body().contains("\"minecraft\":true"));
-        assertTrue(result.body().contains("\"version\":\"1.0.0\""));
+        JsonObject json = body(result);
+        assertTrue(json.get("ok").getAsBoolean());
+        assertEquals("MinecraftBridge", json.get("plugin").getAsString());
+        assertEquals("1.1.0-test", json.get("version").getAsString());
+        assertFalse(result.body().contains(SECRET));
     }
 
     @Test
-    void getWhitelistFiltersBrokenEntries() {
-        HttpResult result = handler.ops(json("getWhitelist"), BEARER, null);
-        assertEquals(200, result.status());
-        assertTrue(result.body().contains("Steve"));
-        assertTrue(result.body().contains(".BedrockKid"));
-        assertTrue(result.body().contains("\"edition\":\"BEDROCK\""));
-        assertFalse(result.body().contains("not-a-uuid"), "invalid uuid entries must be dropped: " + result.body());
-        assertFalse(result.body().contains("\"Bad\""), "entries without a valid uuid must be dropped");
+    void rejectsUnauthorizedRequests() {
+        assertEquals(401, post("{}", null).status());
+        assertEquals(401, post("{}", "Bearer wrong").status());
+        assertEquals(401, handler.ops("{}", null, "also-wrong").status());
+        assertNull(backend.lastOp);
     }
 
     @Test
-    void getPlaytimeReadsTheStatsFile() {
-        HttpResult result = handler.ops("""
-                {"op":"getPlaytime","requestId":"abcdefgh",
-                 "uuid":"069a79f4-44e9-4726-a5be-ca90e38aaf51"}
-                """, BEARER, null);
-        assertEquals(200, result.status());
-        assertTrue(result.body().contains("\"seconds\":3600"));
-        assertTrue(result.body().contains("\"ticks\":72000"));
-        assertTrue(result.body().contains("\"source\":\"file\""));
+    void acceptsBearerAndBridgeSecretHeaders() {
+        String json = "{\"op\":\"getStatus\",\"requestId\":\"" + REQUEST_ID + "\"}";
+        assertEquals(200, handler.ops(json, "Bearer " + SECRET, null).status());
+        assertEquals(200, handler.ops(json, null, SECRET).status());
+        assertEquals("getStatus", backend.lastOp);
     }
 
     @Test
-    void getPlaytimeForUnknownPlayerIsZeroButStillSucceeds() {
-        HttpResult result = handler.ops("""
-                {"op":"getPlaytime","requestId":"abcdefgh",
-                 "uuid":"11111111-2222-3333-4444-555555555555"}
-                """, BEARER, null);
-        assertEquals(200, result.status());
-        assertTrue(result.body().contains("\"seconds\":0"));
-        assertTrue(result.body().contains("\"source\":\"none\""));
+    void rejectsInvalidJsonAndUnknownOperations() {
+        assertEquals(400, post("not json", "Bearer " + SECRET).status());
+        assertEquals(400, post("[]", "Bearer " + SECRET).status());
+        assertEquals(400, post("{\"op\":\"runCommand\",\"requestId\":\"" + REQUEST_ID + "\"}",
+                "Bearer " + SECRET).status());
     }
 
-    private static String json(String op) {
-        return "{\"op\":\"" + op + "\",\"requestId\":\"abcdefgh\"}";
+    @Test
+    void requiresAValidRequestId() {
+        String json = "{\"op\":\"getStatus\",\"requestId\":\"short\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(400, result.status());
+        assertTrue(body(result).get("error").getAsString().contains("requestId"));
+    }
+
+    @Test
+    void addsAJavaWhitelistEntry() {
+        String json = "{\"op\":\"whitelistAddJava\",\"requestId\":\"" + REQUEST_ID
+                + "\",\"uuid\":\"" + UUID_A + "\",\"username\":\"Notch\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(200, result.status());
+        JsonObject jsonBody = body(result);
+        assertTrue(jsonBody.get("ok").getAsBoolean());
+        assertTrue(jsonBody.get("applied").getAsBoolean());
+        assertEquals("whitelistAddJava", backend.lastOp);
+        assertEquals(UUID_A, backend.lastUuid);
+        assertEquals("Notch", backend.lastUsername);
+    }
+
+    @Test
+    void invalidJavaIdentityIsRejectedBeforeTheBackend() {
+        String badUuid = "{\"op\":\"whitelistAddJava\",\"requestId\":\"" + REQUEST_ID
+                + "\",\"uuid\":\"nope\",\"username\":\"Notch\"}";
+        assertEquals(400, post(badUuid, "Bearer " + SECRET).status());
+        String badName = "{\"op\":\"whitelistAddJava\",\"requestId\":\"" + REQUEST_ID
+                + "\",\"uuid\":\"" + UUID_A + "\",\"username\":\"<script>\"}";
+        assertEquals(400, post(badName, "Bearer " + SECRET).status());
+        assertNull(backend.lastOp);
+    }
+
+    @Test
+    void bedrockOperationsAreExplicitlyUnsupported() {
+        for (String op : List.of("whitelistAddBedrock", "whitelistRemoveBedrock")) {
+            String json = "{\"op\":\"" + op + "\",\"requestId\":\"" + REQUEST_ID
+                    + "\",\"gamertag\":\"SomeOne\",\"xuid\":\"2535423456789012\"}";
+            HttpResult result = post(json, "Bearer " + SECRET);
+            assertEquals(501, result.status(), op);
+            assertEquals("bedrock edition is not supported by this server",
+                    body(result).get("error").getAsString());
+        }
+        assertNull(backend.lastOp);
+    }
+
+    @Test
+    void returnsWhitelistEntriesWithEdition() {
+        backend.whitelist.add(new OpsBackend.WhitelistItem(UUID_A.toString(), "Notch"));
+        backend.whitelist.add(new OpsBackend.WhitelistItem("00000000-0000-0000-0001-000000000002", ".Bedrock"));
+        backend.whitelist.add(new OpsBackend.WhitelistItem("not-a-uuid", "broken"));
+        String json = "{\"op\":\"getWhitelist\",\"requestId\":\"" + REQUEST_ID + "\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(200, result.status());
+        var entries = body(result).getAsJsonArray("entries");
+        assertEquals(2, entries.size());
+        assertEquals("JAVA", entries.get(0).getAsJsonObject().get("edition").getAsString());
+        assertEquals("BEDROCK", entries.get(1).getAsJsonObject().get("edition").getAsString());
+    }
+
+    @Test
+    void returnsPlaytimeInSeconds() {
+        backend.playtime = new OpsBackend.Playtime(72_000L, 3_600L, "file");
+        String json = "{\"op\":\"getPlaytime\",\"requestId\":\"" + REQUEST_ID
+                + "\",\"uuid\":\"" + UUID_A + "\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(200, result.status());
+        JsonObject jsonBody = body(result);
+        assertEquals(3_600L, jsonBody.get("seconds").getAsLong());
+        assertEquals(72_000L, jsonBody.get("ticks").getAsLong());
+        assertEquals("file", jsonBody.get("source").getAsString());
+    }
+
+    @Test
+    void returnsOnlinePlayersInTheExistingShape() {
+        backend.players.add(new OpsBackend.OnlinePlayer(UUID_A.toString(), "Notch"));
+        String json = "{\"op\":\"getOnlinePlayers\",\"requestId\":\"" + REQUEST_ID + "\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(200, result.status());
+        JsonObject player = body(result).getAsJsonArray("players").get(0).getAsJsonObject();
+        assertEquals(UUID_A.toString(), player.get("uuid").getAsString());
+        assertEquals("Notch", player.get("username").getAsString());
+        assertEquals("JAVA", player.get("edition").getAsString());
+        // Gson omits null map values; the bot schema declares xuid optional.
+        assertTrue(!player.has("xuid") || player.get("xuid").isJsonNull());
+    }
+
+    @Test
+    void returnsServerStatus() {
+        String json = "{\"op\":\"getStatus\",\"requestId\":\"" + REQUEST_ID + "\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(200, result.status());
+        JsonObject jsonBody = body(result);
+        assertTrue(jsonBody.get("ok").getAsBoolean());
+        assertEquals(1, jsonBody.get("online").getAsInt());
+        assertEquals(20, jsonBody.get("max").getAsInt());
+        assertTrue(jsonBody.get("whitelistEnabled").getAsBoolean());
+        assertTrue(jsonBody.get("enforceWhitelist").getAsBoolean());
+    }
+
+    @Test
+    void mapsBackendTimeoutsAndAvailability() {
+        String json = "{\"op\":\"getOnlinePlayers\",\"requestId\":\"" + REQUEST_ID + "\"}";
+        backend.failure = new OpsBackend.BackendTimeoutException();
+        assertEquals(504, post(json, "Bearer " + SECRET).status());
+
+        backend.failure = new OpsBackend.BackendUnavailableException();
+        assertEquals(503, post(json, "Bearer " + SECRET).status());
+
+        backend.failure = new OpsBackend.BackendFailureException(new IllegalStateException("boom"));
+        assertEquals(500, post(json, "Bearer " + SECRET).status());
+    }
+
+    @Test
+    void mutationFailuresSurfaceAs502WithAReason() {
+        backend.mutation = OpsBackend.MutationResult.fail("whitelist could not be saved");
+        String json = "{\"op\":\"whitelistRemoveJava\",\"requestId\":\"" + REQUEST_ID
+                + "\",\"uuid\":\"" + UUID_A + "\",\"username\":\"Notch\"}";
+        HttpResult result = post(json, "Bearer " + SECRET);
+        assertEquals(502, result.status());
+        assertFalse(body(result).get("ok").getAsBoolean());
+        assertEquals("whitelist could not be saved", body(result).get("reason").getAsString());
+    }
+
+    private static final class FakeBackend implements OpsBackend {
+        final List<WhitelistItem> whitelist = new ArrayList<>();
+        final List<OnlinePlayer> players = new ArrayList<>();
+        String lastOp;
+        UUID lastUuid;
+        String lastUsername;
+        Playtime playtime = new Playtime(0L, 0L, "none");
+        MutationResult mutation = MutationResult.ok(true);
+        RuntimeException failure;
+
+        private void failIfAsked() {
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        @Override
+        public MutationResult addJava(UUID uuid, String username) {
+            lastOp = "whitelistAddJava";
+            lastUuid = uuid;
+            lastUsername = username;
+            failIfAsked();
+            return mutation;
+        }
+
+        @Override
+        public MutationResult removeJava(UUID uuid, String username) {
+            lastOp = "whitelistRemoveJava";
+            lastUuid = uuid;
+            lastUsername = username;
+            failIfAsked();
+            return mutation;
+        }
+
+        @Override
+        public List<WhitelistItem> whitelist() {
+            lastOp = "getWhitelist";
+            failIfAsked();
+            return whitelist;
+        }
+
+        @Override
+        public Playtime playtime(UUID uuid) {
+            lastOp = "getPlaytime";
+            lastUuid = uuid;
+            failIfAsked();
+            return playtime;
+        }
+
+        @Override
+        public List<OnlinePlayer> onlinePlayers() {
+            lastOp = "getOnlinePlayers";
+            failIfAsked();
+            return players;
+        }
+
+        @Override
+        public ServerStatus status() {
+            lastOp = "getStatus";
+            failIfAsked();
+            return new ServerStatus(true, 1, 20, "1.21.1 (fabric)", true, true);
+        }
     }
 }

@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "kr.mcbot.bridge.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "server": [
+    "PlayerAdvancementTrackerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

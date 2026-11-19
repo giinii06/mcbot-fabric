@@ -7,10 +7,13 @@ secrets/
 
 # --- world / server data ---
 data/
+data-cobblemon/
+data-cobblemon.before-restore-*/
 plugins/
 
 # --- backups ---
 backups/
+backups-cobblemon/
 
 # --- misc ---
 *.log

@@ -1,5 +1,5 @@
 # =============================================================================
-# Discord bot for the Minecraft Java + Bedrock cross-play server
+# Discord bot for the Java-only Fabric + Cobblemon server
 #
 #   docker compose up -d     # start (bridge endpoint only until DISCORD_* set)
 #   docker compose logs -f   # follow logs

@@ -8,8 +8,11 @@
 # runtime data
 data/
 server/data/
+server/data-cobblemon/
+server/data-cobblemon.before-restore-*/
 backups/
 server/backups/
+server/backups-cobblemon/
 secrets/
 server/secrets/
 *.sqlite
@@ -25,10 +28,10 @@ build/
 
 # minecraft bridge build output
 minecraft-bridge/build/
+minecraft-bridge/logs/
 minecraft-bridge/out/
 minecraft-bridge/.gradle/
 *.jar
-!minecraft-bridge/libs/*.jar
 !minecraft-bridge/gradle/wrapper/gradle-wrapper.jar
 
 # editors / os

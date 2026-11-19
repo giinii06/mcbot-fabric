@@ -15,14 +15,24 @@ const accounts = {
   BEDROCK: { edition: "BEDROCK" as const, uuid: BEDROCK_UUID, username: "Bedrock Kid", xuid: BEDROCK_XUID },
 };
 
-test("Bedrock registration and removal succeed without calling an unavailable bridge", async () => {
+test("Bedrock registration is refused without calling the bridge, and old Bedrock links are still removable", async () => {
   const { services, repos, bridge, db } = createTestServices({ bridge: createFakeBridge({ failWith: new Error("HTTP 502") }) });
   try {
     const result = await commitRegistration(services, {
       guildId: GUILD, userId: USER, displayName: "BedrockUser", candidate: accounts.BEDROCK,
     });
-    expect(result.ok).toBe(true);
-    expect(repos.getRegistration(GUILD, USER, "BEDROCK")?.discordDisplayName).toBe("BedrockUser");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.stage).toBe("duplicate");
+      expect(result.reason).toContain("Java 전용");
+      expect(result.reason).toContain("기존 기록은 보존");
+    }
+    expect(repos.getRegistration(GUILD, USER, "BEDROCK")).toBeNull();
+
+    repos.insertRegistration(seedRegistration({
+      guildId: GUILD, discordUserId: USER, minecraftEdition: "BEDROCK",
+      minecraftUuid: BEDROCK_UUID, minecraftUsername: "Bedrock Kid",
+    }));
     expect((await unregister(services, {
       guildId: GUILD, userId: USER, actorId: USER, edition: "BEDROCK", reason: "test",
     })).ok).toBe(true);
@@ -31,7 +41,7 @@ test("Bedrock registration and removal succeed without calling an unavailable br
   } finally { db.close(); }
 });
 
-test("failed Bedrock database writes preserve the other account and never change the whitelist", async () => {
+test("failed Bedrock database deletes preserve both accounts and never change the whitelist", async () => {
   const { services, repos, bridge, db } = createTestServices();
   try {
     repos.insertRegistration(seedRegistration({ guildId: GUILD, discordUserId: USER }));
@@ -42,12 +52,19 @@ test("failed Bedrock database writes preserve the other account and never change
       guildId: GUILD, userId: USER, actorId: USER, edition: "BEDROCK", reason: "test",
     })).ok).toBe(false);
     expect(repos.countRegistrations(GUILD)).toBe(2);
+    expect(bridge.calls).toHaveLength(0);
+  } finally { db.close(); }
+});
+
+test("Bedrock commits are refused before any database write", async () => {
+  const { services, repos, bridge, db } = createTestServices();
+  try {
     repos.insertRegistration = () => { throw new Error("disk full"); };
     const result = await commitRegistration(services, {
       guildId: OTHER_GUILD, userId: USER, displayName: "test", candidate: accounts.BEDROCK,
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.stage).toBe("database");
+    if (!result.ok) expect(result.stage).toBe("duplicate");
     expect(repos.countRegistrations(OTHER_GUILD)).toBe(0);
     expect(bridge.calls).toHaveLength(0);
   } finally { db.close(); }
@@ -102,35 +119,34 @@ test("migration preserves existing registrations and permits one account per edi
   } finally { db.close(); }
 });
 
-for (const first of ["JAVA", "BEDROCK"] as const) {
-  test(`registers ${first} and the other edition independently, then removes only the selected account`, async () => {
-    const { services, repos, db, bridge } = createTestServices({
-      limiter: createRateLimiter(10, 6000),
-      identity: { fetchImpl: async (url) => String(url).includes("mojang")
-        ? jsonResponse({ id: JAVA_UUID.replaceAll("-", ""), name: "Notch" })
-        : jsonResponse({ xuid: BEDROCK_XUID }) },
-    });
-    try {
-      const second = first === "JAVA" ? "BEDROCK" : "JAVA";
-      for (const edition of [first, second] as const) {
-        const candidate = accounts[edition];
-        const input = { guildId: GUILD, userId: USER, displayName: "DiscordUser", edition, input: candidate.username };
-        expect((await prepareRegistration(services, input)).ok).toBe(true);
-        expect((await commitRegistration(services, { ...input, candidate })).ok).toBe(true);
-        expect((await prepareRegistration(services, input)).ok).toBe(false);
-        expect((await commitRegistration(services, { ...input, candidate })).ok).toBe(false);
-        const conflict = await commitRegistration(services, { ...input, userId: OTHER_USER, candidate });
-        expect(conflict.ok).toBe(false);
-      }
-      expect(repos.countRegistrations(GUILD)).toBe(2);
-      bridge.calls.length = 0;
-      expect((await unregister(services, { guildId: GUILD, userId: USER, actorId: USER, edition: first, reason: "test" })).ok).toBe(true);
-      expect(repos.getRegistration(GUILD, USER, first)).toBeNull();
-      expect(repos.getRegistration(GUILD, USER, second)?.minecraftUuid).toBe(accounts[second].uuid);
-      expect(bridge.calls.map((call) => call.op)).toEqual(first === "JAVA" ? ["whitelistRemoveJava"] : []);
-    } finally { db.close(); }
+test("registers Java, refuses the retired Bedrock commit, then removes only the Java account", async () => {
+  const { services, repos, db, bridge } = createTestServices({
+    limiter: createRateLimiter(10, 6000),
+    identity: { fetchImpl: async (url) => String(url).includes("mojang")
+      ? jsonResponse({ id: JAVA_UUID.replaceAll("-", ""), name: "Notch" })
+      : jsonResponse({ xuid: BEDROCK_XUID }) },
   });
-}
+  try {
+    const javaInput = { guildId: GUILD, userId: USER, displayName: "DiscordUser", edition: "JAVA" as const, input: accounts.JAVA.username };
+    expect((await prepareRegistration(services, javaInput)).ok).toBe(true);
+    expect((await commitRegistration(services, { ...javaInput, candidate: accounts.JAVA })).ok).toBe(true);
+    expect((await prepareRegistration(services, javaInput)).ok).toBe(false);
+    expect((await commitRegistration(services, { ...javaInput, candidate: accounts.JAVA })).ok).toBe(false);
+    // An old pending flow can still resolve a Bedrock identity, but the guard blocks it.
+    const bedrockInput = { guildId: GUILD, userId: USER, displayName: "DiscordUser", edition: "BEDROCK" as const, input: accounts.BEDROCK.username };
+    expect((await prepareRegistration(services, bedrockInput)).ok).toBe(true);
+    const bedrockCommit = await commitRegistration(services, { ...bedrockInput, candidate: accounts.BEDROCK });
+    expect(bedrockCommit.ok).toBe(false);
+    if (!bedrockCommit.ok) expect(bedrockCommit.reason).toContain("Java 전용");
+    expect(repos.getRegistration(GUILD, USER, "BEDROCK")).toBeNull();
+    expect(repos.countRegistrations(GUILD)).toBe(1);
+
+    bridge.calls.length = 0;
+    expect((await unregister(services, { guildId: GUILD, userId: USER, actorId: USER, edition: "JAVA", reason: "test" })).ok).toBe(true);
+    expect(repos.getRegistration(GUILD, USER, "JAVA")).toBeNull();
+    expect(bridge.calls.map((call) => call.op)).toEqual(["whitelistRemoveJava"]);
+  } finally { db.close(); }
+});
 
 for (const command of ["유저조회", "유저해제", "유저강제해제"]) {
   for (const edition of ["JAVA", "BEDROCK"] satisfies Edition[]) {

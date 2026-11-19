@@ -2,6 +2,7 @@ package kr.mcbot.bridge.publish;
 
 import com.google.gson.Gson;
 import kr.mcbot.bridge.util.BoundedQueue;
+import org.slf4j.Logger;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,15 +15,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
 
 /**
  * Bounded, asynchronous publisher for gameplay events.
  *
- * Producers (event listeners) never block: the payload is serialised and put
+ * <p>Producers (event listeners) never block: the payload is serialised and put
  * on a bounded queue; worker threads deliver it to the Discord bot. When the
  * queue is full the oldest event is dropped and counted - the Minecraft server
- * must never be slowed down or run out of memory because Discord is offline.
+ * must never be slowed down or run out of memory because Discord is offline.</p>
  */
 public final class EventPublisher {
 
@@ -86,7 +86,7 @@ public final class EventPublisher {
         enriched.putIfAbsent("ts", System.currentTimeMillis());
         boolean accepted = queue.offer(gson.toJson(enriched));
         if (!accepted) {
-            logger.warning("bridge event queue rejected an event (dropped=" + queue.droppedCount() + ")");
+            logger.warn("bridge event queue rejected an event (dropped={})", queue.droppedCount());
         }
         return accepted;
     }
@@ -129,7 +129,7 @@ public final class EventPublisher {
 
     private void runLoop() {
         while (running) {
-            String json = null;
+            String json;
             try {
                 json = queue.poll(POLL_MILLIS);
             } catch (InterruptedException ex) {
@@ -169,13 +169,13 @@ public final class EventPublisher {
             if (status >= 200 && status < 300) {
                 return true;
             }
-            logger.warning("bridge event delivery failed with HTTP " + status);
+            logger.warn("bridge event delivery failed with HTTP {}", status);
             return false;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return false;
         } catch (Exception ex) {
-            logger.warning("bridge event delivery failed: " + ex.getClass().getSimpleName());
+            logger.warn("bridge event delivery failed: {}", ex.getClass().getSimpleName());
             return false;
         }
     }

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "minecraft": {
+    "version": "1.21.1",
+    "loader": "fabric",
+    "loaderVersion": "0.20.1",
+    "installerVersion": "1.1.2",
+    "java": "21"
+  },
+  "mods": [
+    {
+      "id": "fabric-api",
+      "name": "Fabric API",
+      "version": "0.116.18+1.21.1",
+      "file": "fabric-api-0.116.18+1.21.1.jar",
+      "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/5SwzqWUu/fabric-api-0.116.18%2B1.21.1.jar",
+      "size": 2453884,
+      "sha256": "1cb46442dda6d3be9979a2619610eb1c1f6641cd7ed7cb3eec058589ce9eed46",
+      "sha512": "9f721c253ae2e9823cb548e8ec132c9928f80a65184e9b8dcfc489a8d632df20cbfea1e65ff8a4333bdb295c41fbe2228b43e4d41c7355d42ed4637a785840a1",
+      "source": {
+        "platform": "modrinth",
+        "projectId": "P7dR8mSH",
+        "versionId": "5SwzqWUu"
+      },
+      "depends": {
+        "fabricloader": ">=0.15.11",
+        "java": ">=21",
+        "minecraft": ">=1.21- <1.21.2-"
+      }
+    },
+    {
+      "id": "cobblemon",
+      "name": "Cobblemon",
+      "version": "1.8.4+1.21.1",
+      "file": "Cobblemon-fabric-1.8.4+1.21.1.jar",
+      "url": "https://cdn.modrinth.com/data/MdwFAVRL/versions/PdOzYHKU/Cobblemon-fabric-1.8.4%2B1.21.1.jar",
+      "size": 139966403,
+      "sha256": "77c4866b2e4c38afb488ed09b62ffd2729ce291dc793fca9c055c087f0b03978",
+      "sha512": "8ba3bc7eb0bb6d52309ca339dfc9fb11adcffebe36d183e0a8df7c8e741edbcbc436c60cc877fd2b42aa224670825cf4f55946676b58ecf0e998f9feae2173c2",
+      "source": {
+        "platform": "modrinth",
+        "projectId": "MdwFAVRL",
+        "versionId": "PdOzYHKU"
+      },
+      "depends": {
+        "fabricloader": ">=0.17.2",
+        "fabric-api": ">=0.116.6+1.21.1",
+        "minecraft": "1.21.1",
+        "java": "21"
+      }
+    }
+  ]
+}

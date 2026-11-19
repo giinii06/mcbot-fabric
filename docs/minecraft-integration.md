@@ -1,183 +1,144 @@
-> 호스팅 구성은 Paper 26.3 / Java 25 / Java 전용으로 변경되었습니다. 현재 설치·자원·백업·포트는 [server/README.md](../server/README.md)를 따르세요. 아래 Leaf·Bedrock 측정은 이전 구성 기록입니다. 브릿지는 이제 최대 인원과 keepInventory를 강제하지 않습니다.
+# Minecraft 통합 (Discord 봇 ↔ Fabric 서버)
 
-도전과제 한국어 번역: `src/minecraft/advancements.ko.json`은 Minecraft 26.3 서버 JAR의
-`data/minecraft/advancement/` 중 display가 있는 126개를 공식 `ko_kr.json`과 매칭한 데이터입니다.
-출처는 [26.3 버전 메타데이터](https://piston-meta.mojang.com/v1/packages/11f1aefe473eefba0af62e3286c33b692807b2eb/26.3.json),
-[한국어 언어 리소스](https://resources.download.minecraft.net/10/10dd563534860e65b71a510272202fe03dbd00f5)이며
-언어 파일 SHA-1은 `10dd563534860e65b71a510272202fe03dbd00f5`입니다.
-실행 중 번역 다운로드는 하지 않습니다. Minecraft 업그레이드 시 이 데이터를 함께 갱신하세요.
+작성 기준: 2026-11-19 · 대상: Fabric 1.21.1 + Cobblemon 1.8.4, Java 21, Java Edition 전용.
 
-# Minecraft 통합 (Discord 봇 ↔ Minecraft 서버)
-
-작성 기준: 2026-10-02 · 대상 서버 `server/` (Leaf 1.21.11 #179, Java 21, Geyser + Floodgate)
-(구 경로 `~/minecraft`는 `server/`로 이관됨 — 아래 모든 `server/` 경로는 리포 루트 기준)
-
----
+호스팅·백업·포트는 [server/README.md](../server/README.md)를 따릅니다.
 
 ## 1. 아키텍처
 
 ```
 ┌────────────────────────┐
-│ Discord                │  slash command / 로그 채널 embed
+│ Discord                │  slash command / 로그 채널
 └───────────┬────────────┘
-            │ discord.js (Gateway + REST)
+            │ discord.js
 ┌───────────▼────────────┐   POST /bridge/events   ┌─────────────────────────────┐
-│ mcbot (bun)            │ ───────────────────────▶│ minecraft (Leaf/Paper)      │
-│  bridge server         │   Authorization:        │  MinecraftBridge 플러그인    │
-│  :47865                │   Bearer <시크릿>        │  0.0.0.0:8765              │
-│  GET  /health          │ ◀───────────────────────│  GET  /health              │
-│  POST /bridge/events   │   POST /ops (8개 타입)   │  POST /ops                 │
-└────────────────────────┘                         └─────────────────────────────┘
+│ mcbot (Bun)            │ ───────────────────────▶│ minecraft (Fabric)          │
+│  :47865                │   Authorization:        │  MinecraftBridge 모드        │
+│  GET /health           │   Bearer <시크릿>        │  0.0.0.0:8765               │
+│  POST /bridge/events   │ ◀───────────────────────│  GET  /health               │
+└────────────────────────┘   POST /ops              │  POST /ops                  │
         외부 Docker 네트워크 `mc-discord` (포트 호스트 미게시)
 ```
 
-- 양방향 모두 **공유 시크릿** `MC_BRIDGE_SECRET` 로 인증 (`Bearer` 또는 `X-Bridge-Secret`).
-  타이밍 안전 비교, 실패 401. 봇 컨테이너는 `127.0.0.1:47865` 에만 게시.
-- 플러그인은 **Paper 이벤트**만 사용합니다 (`latest.log` tail, Docker 로그, RCON, `/list` 주기 실행 없음).
-  RCON 은 백업 전용입니다.
-- 봇은 Discord 토큰 없이도 브릿지만으로 기동합니다 (연결 확인·로그 검증용).
+- 양방향 모두 공유 시크릿 `MC_BRIDGE_SECRET`으로 인증합니다.
+  `Authorization: Bearer` 또는 `X-Bridge-Secret`, 타이밍 안전 비교, 실패 401.
+- 브릿지는 Fabric 이벤트를 사용합니다. 로그 tail, RCON polling, `/list` 주기 실행은
+  사용하지 않습니다. RCON은 백업 전용입니다.
+- 모든 게임 상태 접근은 서버 스레드로 위임되고 4초 타임아웃이 적용됩니다.
+- 봇은 Discord 토큰 없이도 브릿지 health/이벤트 검증용으로 기동할 수 있습니다.
 
-### 이벤트 (플러그인 → 봇, `POST /bridge/events`)
+### 이벤트 (브릿지 → 봇, `POST /bridge/events`)
 
 | type | payload |
 |---|---|
 | `player.join` | `player{uuid, username, edition, xuid}` |
-| `player.identity` | 인증된 Bedrock 접속 시도 `player`; 화이트리스트 거절 시에도 전송하며 Discord 로그에는 표시하지 않음 |
-| `player.chat` | `player`, `message` (일반 공개 채팅, 1~1024자) |
-| `player.quit` | `player`, `reason` |
-| `player.death` | `player`, `message`, `cause`, `killer` |
+| `player.quit` | `player` |
+| `player.chat` | `player`, `message` (1~1024자, 제어문자 제거) |
+| `player.death` | `player`, `message`, `cause`, `killer`, `deathCount` |
 | `player.advancement` | `player`, `advancement{key,title,description,frame}` |
 | `server.status` | `started`\|`stopped`, `online`, `max`, `players[]` |
 
-공통: `eventId`(UUID), `ts`. 좌표/월드/바이오는 넣지 않습니다 (사양 무필드 + `Validation.sanitizeText` 좌표 패턴 제거).
-수락 시 봇 로그에 `bridge event accepted` 가 남습니다.
+공통: `eventId`(UUID), `ts`. 좌표/월드/바이오는 넣지 않습니다.
+`player.identity`(Bedrock 인증 이벤트)는 새 서버에서 발생하지 않습니다.
 
-### Ops (봇 → 플러그인, `POST /ops`)
-
-허용 타입은 8개뿐입니다 (`Ops.fromWire` → `Optional<Ops>`). 임의 command 는 400.
+### Ops (봇 → 브릿지, `POST /ops`)
 
 | op | 요청 | 응답 |
 |---|---|---|
 | `whitelistAddJava` | `uuid`, `username` | `{ok, applied}` |
 | `whitelistRemoveJava` | `uuid`, `username` | `{ok, applied}` |
-| `whitelistAddBedrock` | `gamertag`, `xuid` | `{ok, applied}` |
-| `whitelistRemoveBedrock` | `gamertag`, `xuid` | `{ok, applied}` |
+| `whitelistAddBedrock` | – | **501** `bedrock edition is not supported by this server` |
+| `whitelistRemoveBedrock` | – | **501** |
 | `getWhitelist` | – | `{entries:[{uuid,name,edition}]}` |
 | `getPlaytime` | `uuid` | `{uuid, seconds, ticks, source}` |
 | `getOnlinePlayers` | – | `{players:[...]}` |
 | `getStatus` | – | `{ok, online, max, version, whitelistEnabled, enforceWhitelist}` |
 
-실패 시 HTTP 502 + `{ok:false, applied:false, reason}`. 파싱 불가는 400, 인증 실패 401.
+실패: 인증 401, 잘못된 payload 400, 서버 스레드 타임아웃 504, 서버 중지 503,
+변경 실패 502 `{ok:false, applied:false, reason}`. 임의 명령 실행 API는 없습니다.
 
----
+## 2. 화이트리스트
 
-## 2. 화이트리스트 규칙
+- `ENABLE_WHITELIST=true`, `ENFORCE_WHITELIST=true`.
+- 봇이 `/ops`로 Java UUID/이름을 추가·제거합니다.
+- 브릿지는 `PlayerManager.getWhitelist()`의 `Whitelist`에 `WhitelistEntry`를
+  추가/제거하고 `save()`합니다. `whitelist.json`을 외부에서 덮어쓰지 않습니다.
+- `getWhitelist`는 서버 파일에서 UUID/이름을 읽어 `edition`을 계산합니다.
+  기존 Bedrock UUID(`new UUID(0,xuid)`)는 `BEDROCK`으로 표시되지만 새 등록은
+  거부됩니다.
+- 서버가 꺼져 있으면 변경이 실패할 수 있습니다. 기동 후 등록하거나
+  `/화이트리스트동기-sync`를 사용하세요.
 
-- 서버는 `ENABLE_WHITELIST=true` (itzg 이미지 환경변수) → `white-list=true`, `enforce-whitelist=true`.
-- MinecraftBridge는 `ProfileWhitelistVerifyEvent`에서 Floodgate API가 인증한 Bedrock 접속(연결된 Java 계정 포함)만 화이트리스트 예외로 허용합니다. Java 접속과 차단·정원 검사는 유지합니다. Bedrock의 Discord 등록은 접속 필수 조건이 아닙니다.
-  `WHITELIST` 목록 환경변수는 **설정하지 않습니다** (봇이 관리, 매 시작 재동기화 방지).
-- **Java**: `whitelist add/remove <name>` 콘솔 디스패치 → 실패 시
-  `OfflinePlayer.setWhitelisted` → 항상 `getWhitelistedPlayers()` 로 결과 검증.
-- **Bedrock**: 인증된 Minecraft UUID와 Discord 이름의 연결만 DB에 저장합니다. 등록·해제·동기화는 Bedrock 화이트리스트 API를 호출하지 않습니다. 계정 조회·입력 검증과 중복 등록 방지는 유지합니다.
-- Java 등록 시 화이트리스트 추가 → DB 저장, **DB 실패 시 화이트리스트 롤백**.
-- 등록 기본 키는 `(guild_id, discord_user_id, minecraft_edition)`이며 Java·Bedrock을 각각 하나씩 연결할 수 있습니다. Minecraft UUID는 서버 내에서 여전히 유일합니다. 마이그레이션 004는 기존 등록을 보존하고, 조회·해제는 에디션별로 처리합니다.
-  Java 해제는 화이트리스트 제거 → DB 삭제이며, DB 삭제 실패 시 화이트리스트를 복구합니다.
-- 첫 등록 직후 `whitelist.json` 의 `name` 이 `(unknown)` 으로 남을 수 있습니다.
-  온라인 모드는 **UUID 기준 매칭**이라 접속에는 영향 없고, 첫 접속 시 서버가 이름을 갱신합니다.
+## 3. 플레이타임
 
-### Floodgate UUID (실측)
+- 온라인: `StatHandler`의 `Stats.PLAY_TIME`을 10초마다 스냅샷.
+- 오프라인: `<world>/stats/<uuid>.json`의 `minecraft:play_time`.
+- 20 tick = 1초, 캐시 TTL 15초/최대 256개.
+- 1.21.1은 `world/stats/`, 최신 형식은 `world/players/stats/`도 인식합니다.
 
-`org.geysermc.floodgate.util.Utils.getJavaUuid(long xuid)` = `new UUID(0, xuid)`
-→ 문자열 `00000000-0000-0000-<lsb 상위 4 hex>-<lsb 하위 12 hex>`.
-xuid ≥ 2^48 이면 4번째 그룹이 `0000` 이 아니므로 판정 prefix 는 **3그룹** `00000000-0000-0000-` 입니다.
-
-```js
-// 예: xuid 2535453759792258
-"00000000-0000-0000-0009-01fb54b26482"
-```
-
-구현: Java `Validation.bedrockUuid` / `Validation.isBedrockUuid`,
-TS `src/minecraft/identity.ts` `bedrockUuid` / `isBedrockUuid` (테스트로 고정).
-
----
-
-## 3. 플레이타임 · 리더보드
-
-- 온라인: `Statistic.PLAY_ONE_MINUTE` (200 tick 스냅샷), 오프라인: `world/stats/<uuid>.json`
-  (`minecraft:play_time` 우선, `minecraft:play_one_minute` 폴백). 20 tick = 1초.
-- 캐시 TTL 15초 / 최대 256개, 요청 `sync-task-ms` 4초 타임아웃.
-- 정렬: seconds desc → ticks desc → `username` asc (`localeCompare`, "en", sensitivity base) → uuid asc.
-- 표시: `0분` / `1분 미만` / `N분` / `N시간 N분` / `N일 N시간 N분` (0 은 생략).
-- Discord 표시명: `formatMinecraftUser(discord, mc)` = `<Discord> (<MC>)`, 같으면 중복 제거, 멘션 금지.
-- 플러그인 시작 시 `playtime api self-check` 로 `PLAY_ONE_MINUTE` 매핑을 실측합니다.
-
----
-
-## 4. 배포 (실제 수행 명령)
+## 4. 배포
 
 ```bash
-# 1) 전용 네트워크 (외부, 1회 — server/install.sh가 자동 생성하지만 수동도 가능)
+# 1) 네트워크 (1회)
 docker network create mc-discord
 
-# 2) 게임 서버: server/에서 설치·기동 (멱등, 월드 보존)
-cd server && ./install.sh && ./mc.sh check && cd ..
-
-# 3) 플러그인 설치 (시크릿은 server/data/plugins/MinecraftBridge/config.yml, 600)
+# 2) 브릿지 빌드
 bun run minecraft:build-plugin
-cp minecraft-bridge/build/libs/MinecraftBridge-1.0.0.jar server/data/plugins/
-cd server && ./mc.sh restart && ./mc.sh check && cd ..
 
-# 4) 봇 (리포 루트)
+# 3) 서버 설치/기동
+cd server
+cp .env.example .env
+./install.sh --no-start
+./mc.sh start
+./mc.sh check
+cd ..
+
+# 4) 봇
+cp .env.example .env
+# DISCORD_TOKEN, DISCORD_APPLICATION_ID, MC_BRIDGE_SECRET 입력
 docker compose up -d --build
 ```
 
-시크릿은 `.mc_bridge_secret` (호스트) ↔ `server/data/plugins/MinecraftBridge/config.yml` ↔ 봇 `.env`
-세 곳에서 동일해야 합니다. 값은 어디에도 출력하지 않습니다.
+시크릿은 `server/secrets/bridge_secret` ↔ 루트 `.env`의 `MC_BRIDGE_SECRET`에서
+동일해야 합니다. 값은 출력하거나 커밋하지 않습니다.
 
----
-
-## 5. 검증 기록 (2026-10-02)
+## 5. 검증 기록 (2026-11-19)
 
 | 항목 | 결과 |
 |---|---|
-| `bun test` | **107 pass / 0 fail** |
-| `bunx tsc --noEmit` | 통과 |
-| 플러그인 JUnit (`bun run minecraft:test`) | **53 pass / 0 fail**, BUILD SUCCESSFUL |
-| `./mc.sh check` (플러그인 설치·화이트리스트 변경 후) | ALL CHECKS PASSED |
-| 플러그인 로그 | `MinecraftBridge listening on 0.0.0.0:8765 -> http://mcbot:47865`, `playtime api self-check: ok` |
-| 이벤트 수신 | 봇 로그 `bridge event accepted {"type":"server.status","eventId":"765f47f3-…"}` |
-| `GET :8765/health` | 200 `{ok, plugin:"MinecraftBridge", version:"1.0.0", minecraft:true}` |
-| `GET :47865/health` (호스트) | 200 `{ok:true, minecraft:true}` |
-| `/ops` 시크릿 없이 | **401** |
-| `getStatus` | `whitelistEnabled:true, enforceWhitelist:true, online:0, max:10, version:"1.21.11-179-…"` |
-| `whitelistAddJava` → `getWhitelist` → `whitelistRemoveJava` | 추가/중복/제거 모두 정상, `whitelist.json` 원상복구 |
-| `whitelistAddBedrock` (가짜 gamertag) | 502 + reason, 상태 무변경 (Floodgate API 가 검증하는 의도된 동작) |
-| `getPlaytime` (미접속 UUID) | `{seconds:0, ticks:0, source:"none"}` |
-| `getOnlinePlayers` | `[]` |
+| `bun test` | 167 pass / 0 fail |
+| Gradle JUnit | 64 pass / 0 fail |
+| 실제 기동 | Fabric 1.21.1 + Cobblemon 1.8.4, `Done (22.465s)!` |
+| 브릿지 로그 | `MinecraftBridge 1.1.0 listening on 0.0.0.0:8765` |
+| `GET /health` | 200 `{ok:true, plugin:"MinecraftBridge", version:"1.1.0", minecraft:true}` |
+| 무인증 `/ops` | 401 |
+| `getStatus` | `online:0, max:1000, version:"1.21.1 (fabric)"` |
+| 화이트리스트 add/list/remove | `whitelist.json` 반영·원상복구 |
+| `getPlaytime` (123400틱 임시 파일) | `6170초, source:"file"` |
+| Bedrock op | 501 |
+| 이벤트 수신 | `server.status` stopped/started, Bearer 인증 통과 |
+| 백업/복구 | zstd 생성·검증, 보호 사본 후 복구 성공 |
 
----
+미검증: 실제 Java 클라이언트의 join/chat/death/advancement 수신, 실제 Discord
+게이트웨이·슬래시 명령 실행, OCI 외부 접속.
 
-## 6. 알려진 제약 / 남은 수동 작업
+## 6. 알려진 제약
 
-1. **Discord 신규 어플리케이션 생성(사람 수동)**: `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`
-   를 `.env` 에 넣고 `docker compose up -d`, `bun run minecraft:commands` (전역 등록,
-   봇이 들어간 모든 서버에 동일 적용, 반영 최대 1시간), `bun run invite` 로 서버별 초대.
-   길드 하나에 즉시 반영하려면 `bun run minecraft:commands -- <guildId>`
-   (그 길드의 전역 명령을 덮어쓰므로 명령 변경 시 다시 실행).
-   이전 봇(`giinii_bot`, `bwxi_origin`) 은 건드리지 않습니다.
-2. **실접속 검증**: `player.join`/`quit`/`death`/`advancement` 은 온라인 모드 + 유효 계정을
-   가진 실제 클라이언트가 필요합니다 (오프라인 인증·목업 접속 금지 정책).
-   브릿지 전송 계층 자체는 `server.status` 로 이미 실측 완료했습니다.
-3. **Bedrock 등록**: 실재하는 Xbox gamertag 가 필요합니다.
-4. 등록 직후 화이트리스트 항목 이름이 `(unknown)` 인 경우 첫 접속 시 갱신됩니다.
+1. Discord 애플리케이션 생성, 토큰 입력, 전역 명령 등록은 수동입니다.
+2. 실제 플레이어 이벤트는 온라인 모드 + 유효 Java 계정이 필요합니다.
+3. Bedrock 접속과 등록은 지원하지 않습니다. 기존 DB 기록은 보존됩니다.
+4. 도전과제 이벤트는 Fabric API에 없어 `PlayerAdvancementTracker.grantCriterion`
+   Mixin으로 수집합니다. 서버 시작 로그에 Mixin 오류가 없는지 확인하세요.
+5. 등록 직후 `whitelist.json`의 이름이 `(unknown)`일 수 있습니다. 온라인 모드는
+   UUID 기준이라 접속에 영향이 없고 첫 접속 시 갱신됩니다.
 
 ## 7. 트러블슈팅
 
 | 증상 | 확인 |
 |---|---|
-| 봇 `/health` 의 `minecraft:false` | `docker logs minecraft` 에 `MinecraftBridge listening` 인지, `docker network inspect mc-discord` 에 두 컨테이너 모두 속해 있는지 |
-| `401` 반환 | 봇 `.env` 와 `server/data/plugins/MinecraftBridge/config.yml` 의 시크릿이 같은지 (재시작 후 반영) |
-| 봇 로그에 `discord disabled` | `.env` 의 `DISCORD_TOKEN`/`DISCORD_APPLICATION_ID` 미입력 (공란=미설정) |
-| `fwhitelist … entry was not created` | Floodgate 의 Xbox API 조회 실패 → gamertag 오타/미보유 계정 |
-| "계정을 찾을 수 없습니다 … 잠시 후 다시 시도" | Geyser Global API 가 **캐시에 있는 플레이어만** 반환 (공식 문서). 캐시 미보유 + Xbox Live API 레이트리밋이면 503 → 계정이 있어도 조회 불가. 서버의 `fwhitelist` 도 같은 API 라 동일 실패. 다른 Geyser 서버에 한 번 접속해 캐시에 올린 뒤 재시도 |
-| 이벤트가 중복 전시 | 봇 dedup 3분 TTL + 플러그인 재시도. 핸들러 실패(500)는 dedup 에 남지 않아 재시도가 재처리됨 |
+| 봇 `/health`의 `minecraft:false` | `docker logs minecraft`의 `MinecraftBridge listening`, `docker network inspect mc-discord` |
+| 401 | 루트 `.env`와 `server/secrets/bridge_secret` 일치 여부 |
+| 503/504 | 서버 스레드 정지/과부하, `docker logs minecraft` 확인 |
+| 봇 로그 `discord disabled` | `.env`의 토큰/애플리케이션 ID 미입력 |
+| 모드 검증 실패 | `./mc.sh install-mods`, 디스크/다운로드 확인 |
+| 이벤트 중복 | 봇 dedup TTL + 브릿지 재시도. 핸들러 실패는 dedup에 남지 않음 |

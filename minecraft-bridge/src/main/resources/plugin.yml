@@ -1,7 +1,0 @@
-name: MinecraftBridge
-version: '1.0.0'
-main: kr.mcbot.bridge.MinecraftBridgePlugin
-api-version: '1.21'
-description: Typed HTTP bridge between the Discord bot and this Minecraft server.
-author: mcbot
-softdepend: [floodgate, Geyser-Spigot, ViaVersion]

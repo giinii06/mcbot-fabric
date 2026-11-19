@@ -2,6 +2,7 @@ package kr.mcbot.bridge.bridge;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import org.slf4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -13,17 +14,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
 
 /**
  * Minimal HTTP surface exposed to the Discord bot:
  *
- *   GET  /health  - liveness probe
- *   POST /ops     - one of the typed operations in {@link Ops}
+ * <pre>
+ *   GET  /health  - liveness probe (no auth)
+ *   POST /ops     - one of the typed operations in {@link Ops} (Bearer secret)
+ * </pre>
  *
- * Anything else is a 404. There is no endpoint that can run an arbitrary
+ * <p>Anything else is a 404. There is no endpoint that can run an arbitrary
  * Minecraft command, and the listener is only reachable over the private
- * Docker network (never published to the host).
+ * Docker network (never published to the host).</p>
  */
 public final class BridgeHttpServer {
 
@@ -32,6 +34,8 @@ public final class BridgeHttpServer {
 
         HttpResult ops(String body, String authorization, String bridgeSecret);
     }
+
+    private static final int MAX_BODY_BYTES = 64 * 1024;
 
     private final HttpServer server;
     private final ExecutorService executor;
@@ -71,7 +75,7 @@ public final class BridgeHttpServer {
         try {
             server.stop(1);
         } catch (Exception ex) {
-            logger.warning("bridge http stop failed: " + ex.getMessage());
+            logger.warn("bridge http stop failed: {}", ex.getMessage());
         }
         executor.shutdownNow();
     }
@@ -98,13 +102,12 @@ public final class BridgeHttpServer {
                 result = json(404, "not found");
             }
         } catch (Exception ex) {
-            logger.warning("bridge request failed: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+            logger.warn("bridge request failed: {} - {}",
+                    ex.getClass().getSimpleName(), ex.getMessage());
             result = json(500, "internal error");
         }
         write(exchange, result);
     }
-
-    private static final int MAX_BODY_BYTES = 64 * 1024;
 
     private static String readBody(InputStream in) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();

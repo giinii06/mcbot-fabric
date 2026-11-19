@@ -3,14 +3,9 @@ package kr.mcbot.bridge.bridge;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import kr.mcbot.bridge.stats.PlaytimeService;
 import kr.mcbot.bridge.util.BridgeAuth;
 import kr.mcbot.bridge.util.Validation;
-import kr.mcbot.bridge.whitelist.WhitelistFileReader;
-import kr.mcbot.bridge.whitelist.WhitelistService;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,38 +14,26 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.logging.Logger;
 
-/** Parses, validates and executes the typed bridge operations. */
+/**
+ * Parses, validates and executes the typed bridge operations.
+ *
+ * <p>This class contains no Minecraft API calls: {@link OpsBackend} owns the
+ * server-thread hop, which keeps the wire contract easy to test and makes it
+ * impossible to touch game state from an HTTP thread by accident.</p>
+ */
 public final class OpsHandler implements BridgeHttpServer.Handler {
 
-    private final Plugin plugin;
-    private final WhitelistService whitelist;
-    private final PlaytimeService playtime;
+    private final OpsBackend backend;
     private final String secret;
-    private final String pluginVersion;
-    private final long syncTimeoutMillis;
+    private final String bridgeVersion;
     private final Gson gson = new Gson();
     private final Logger logger;
 
-    public OpsHandler(
-            Plugin plugin,
-            WhitelistService whitelist,
-            PlaytimeService playtime,
-            String secret,
-            String pluginVersion,
-            long syncTimeoutMillis,
-            Logger logger) {
-        this.plugin = plugin;
-        this.whitelist = whitelist;
-        this.playtime = playtime;
+    public OpsHandler(OpsBackend backend, String secret, String bridgeVersion, Logger logger) {
+        this.backend = backend;
         this.secret = secret;
-        this.pluginVersion = pluginVersion;
-        this.syncTimeoutMillis = Math.max(500, syncTimeoutMillis);
+        this.bridgeVersion = bridgeVersion;
         this.logger = logger;
     }
 
@@ -58,8 +41,8 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
     public HttpResult health() {
         JsonObject body = new JsonObject();
         body.addProperty("ok", true);
-        body.addProperty("plugin", plugin == null ? "MinecraftBridge" : plugin.getName());
-        body.addProperty("version", pluginVersion);
+        body.addProperty("plugin", "MinecraftBridge");
+        body.addProperty("version", bridgeVersion);
         body.addProperty("minecraft", true);
         return new HttpResult(200, gson.toJson(body));
     }
@@ -97,8 +80,15 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
             return dispatch(op.get(), request);
         } catch (ValidationException ex) {
             return error(400, "invalid payload: " + ex.getMessage());
+        } catch (OpsBackend.BackendTimeoutException ex) {
+            return error(504, "server busy");
+        } catch (OpsBackend.BackendUnavailableException ex) {
+            return error(503, "server unavailable");
+        } catch (OpsBackend.BackendFailureException ex) {
+            logger.warn("bridge op failed: {} - {}", op.get().wireName(), ex.getMessage());
+            return error(500, "internal error");
         } catch (Exception ex) {
-            logger.warning("bridge op failed: " + op.get().wireName() + " - " + ex.getMessage());
+            logger.warn("bridge op crashed: {} - {}", op.get().wireName(), ex.toString());
             return error(500, "internal error");
         }
     }
@@ -110,31 +100,18 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
                 UUID uuid = requireUuid(request);
                 String username = requireJavaName(request);
                 boolean add = op == Ops.WHITELIST_ADD_JAVA;
-                return runSync(() -> {
-                    WhitelistService.Result result = add
-                            ? whitelist.addJava(uuid, username)
-                            : whitelist.removeJava(uuid, username);
-                    return mutate(result);
-                });
+                OpsBackend.MutationResult result = add
+                        ? backend.addJava(uuid, username)
+                        : backend.removeJava(uuid, username);
+                return mutate(result);
             }
             case WHITELIST_ADD_BEDROCK:
-            case WHITELIST_REMOVE_BEDROCK: {
-                String gamertag = requireGamertag(request);
-                String xuid = optionalString(request, "xuid");
-                if (xuid != null && !Validation.isValidXuid(xuid)) {
-                    throw new ValidationException("xuid");
-                }
-                boolean add = op == Ops.WHITELIST_ADD_BEDROCK;
-                return runSync(() -> {
-                    WhitelistService.Result result = add
-                            ? whitelist.addBedrock(gamertag, xuid)
-                            : whitelist.removeBedrock(gamertag, xuid);
-                    return mutate(result);
-                });
-            }
+            case WHITELIST_REMOVE_BEDROCK:
+                // This server is Java-only (Fabric + Cobblemon, no Geyser/Floodgate).
+                return error(501, "bedrock edition is not supported by this server");
             case GET_WHITELIST: {
                 List<Map<String, Object>> entries = new ArrayList<>();
-                for (WhitelistFileReader.Entry entry : whitelist.list()) {
+                for (OpsBackend.WhitelistItem entry : backend.whitelist()) {
                     if (!Validation.isValidUuid(entry.uuid())) {
                         continue;
                     }
@@ -142,9 +119,8 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("uuid", entry.uuid().toLowerCase(Locale.ROOT));
                     item.put("name", name.isEmpty() ? "(unknown)" : name);
-                    item.put(
-                            "edition",
-                            Validation.isBedrockUuid(entry.uuid()) || name.startsWith(".") ? "BEDROCK" : "JAVA");
+                    item.put("edition", PlayerIdentity.editionOf(
+                            UUID.fromString(entry.uuid().toLowerCase(Locale.ROOT)), name));
                     entries.add(item);
                 }
                 JsonObject body = new JsonObject();
@@ -153,7 +129,7 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
             }
             case GET_PLAYTIME: {
                 UUID uuid = requireUuid(request);
-                PlaytimeService.Playtime value = playtime.get(uuid);
+                OpsBackend.Playtime value = backend.playtime(uuid);
                 JsonObject body = new JsonObject();
                 body.addProperty("uuid", uuid.toString().toLowerCase(Locale.ROOT));
                 body.addProperty("seconds", value.seconds());
@@ -162,34 +138,32 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
                 return new HttpResult(200, gson.toJson(body));
             }
             case GET_ONLINE_PLAYERS: {
-                return runSync(() -> {
-                    List<Map<String, Object>> players = new ArrayList<>();
-                    for (Player player : Bukkit.getOnlinePlayers()) {
-                        players.add(PlayerIdentity.playerRef(player.getUniqueId(), player.getName()));
-                    }
-                    JsonObject body = new JsonObject();
-                    body.add("players", gson.toJsonTree(players));
-                    return new HttpResult(200, gson.toJson(body));
-                });
+                List<Map<String, Object>> players = new ArrayList<>();
+                for (OpsBackend.OnlinePlayer player : backend.onlinePlayers()) {
+                    players.add(PlayerIdentity.playerRef(
+                            UUID.fromString(player.uuid().toLowerCase(Locale.ROOT)), player.username()));
+                }
+                JsonObject body = new JsonObject();
+                body.add("players", gson.toJsonTree(players));
+                return new HttpResult(200, gson.toJson(body));
             }
             case GET_STATUS: {
-                return runSync(() -> {
-                    JsonObject body = new JsonObject();
-                    body.addProperty("ok", true);
-                    body.addProperty("online", Bukkit.getOnlinePlayers().size());
-                    body.addProperty("max", Bukkit.getMaxPlayers());
-                    body.addProperty("version", Validation.sanitizeText(Bukkit.getVersion(), 120));
-                    body.addProperty("whitelistEnabled", Bukkit.hasWhitelist());
-                    body.addProperty("enforceWhitelist", Bukkit.isWhitelistEnforced());
-                    return new HttpResult(200, gson.toJson(body));
-                });
+                OpsBackend.ServerStatus status = backend.status();
+                JsonObject body = new JsonObject();
+                body.addProperty("ok", status.ok());
+                body.addProperty("online", status.online());
+                body.addProperty("max", status.max());
+                body.addProperty("version", Validation.sanitizeText(status.version(), 120));
+                body.addProperty("whitelistEnabled", status.whitelistEnabled());
+                body.addProperty("enforceWhitelist", status.enforceWhitelist());
+                return new HttpResult(200, gson.toJson(body));
             }
             default:
                 return error(400, "unknown operation");
         }
     }
 
-    private HttpResult mutate(WhitelistService.Result result) {
+    private HttpResult mutate(OpsBackend.MutationResult result) {
         JsonObject body = new JsonObject();
         body.addProperty("ok", result.ok());
         body.addProperty("applied", result.applied());
@@ -197,30 +171,6 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
             body.addProperty("reason", Validation.sanitizeText(result.reason(), 300));
         }
         return new HttpResult(result.ok() ? 200 : 502, gson.toJson(body));
-    }
-
-    private <T> HttpResult runSync(Callable<T> task) {
-        try {
-            T value = Bukkit.getScheduler()
-                    .callSyncMethod(plugin, task)
-                    .get(syncTimeoutMillis, TimeUnit.MILLISECONDS);
-            if (value instanceof HttpResult httpResult) {
-                return httpResult;
-            }
-            return error(500, "internal error");
-        } catch (TimeoutException ex) {
-            return error(504, "server busy");
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return error(503, "interrupted");
-        } catch (ExecutionException ex) {
-            Throwable cause = ex.getCause();
-            logger.warning("sync task failed: " + (cause == null ? ex.getMessage() : cause.getMessage()));
-            return error(500, "internal error");
-        } catch (RuntimeException ex) {
-            logger.warning("sync task rejected: " + ex.getMessage());
-            return error(503, "server unavailable");
-        }
     }
 
     // ------------------------------------------------------------------
@@ -240,14 +190,6 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
         return obj.get(key).getAsString();
     }
 
-    private static String optionalString(JsonObject obj, String key) {
-        String value = readString(obj, key);
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value;
-    }
-
     private static UUID requireUuid(JsonObject obj) {
         String value = readString(obj, "uuid");
         if (!Validation.isValidUuid(value)) {
@@ -260,14 +202,6 @@ public final class OpsHandler implements BridgeHttpServer.Handler {
         String value = readString(obj, "username");
         if (!Validation.isValidJavaName(value)) {
             throw new ValidationException("username");
-        }
-        return value;
-    }
-
-    private static String requireGamertag(JsonObject obj) {
-        String value = readString(obj, "gamertag");
-        if (!Validation.isValidGamertag(value)) {
-            throw new ValidationException("gamertag");
         }
         return value;
     }

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,7 +78,7 @@ class EventPublisherTest {
     @Test
     void deliversToTheBotWithBearerAuth() throws Exception {
         int port = startServer();
-        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 2000, 1, Logger.getLogger("test"));
+        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 2000, 1, LoggerFactory.getLogger("test"));
 
         assertTrue(publisher.submit(joinPayload()));
         assertTrue(publisher.awaitDrain(5000L));
@@ -101,7 +101,7 @@ class EventPublisherTest {
     @Test
     void injectsEventIdAndTimestampOnlyWhenMissing() throws Exception {
         int port = startServer();
-        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 2000, 1, Logger.getLogger("test"));
+        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 2000, 1, LoggerFactory.getLogger("test"));
 
         Map<String, Object> payload = joinPayload();
         payload.put("eventId", "fixed-event-id-12345678");
@@ -120,7 +120,7 @@ class EventPublisherTest {
 
     @Test
     void queueIsBoundedAndOldestEventsAreDropped() throws Exception {
-        publisher = new EventPublisher("http://127.0.0.1:1", SECRET, 5, 1, 100, 100, 0, Logger.getLogger("test"));
+        publisher = new EventPublisher("http://127.0.0.1:1", SECRET, 5, 1, 100, 100, 0, LoggerFactory.getLogger("test"));
         for (int i = 0; i < 50; i++) {
             assertTrue(publisher.submit(joinPayload()));
         }
@@ -130,7 +130,7 @@ class EventPublisherTest {
 
     @Test
     void callerIsNeverBlockedWhenTheBotIsDown() throws Exception {
-        publisher = new EventPublisher("http://127.0.0.1:1", SECRET, 8, 1, 100, 100, 0, Logger.getLogger("test"));
+        publisher = new EventPublisher("http://127.0.0.1:1", SECRET, 8, 1, 100, 100, 0, LoggerFactory.getLogger("test"));
         long start = System.nanoTime();
         for (int i = 0; i < 8; i++) {
             assertTrue(publisher.submit(joinPayload()));
@@ -149,7 +149,7 @@ class EventPublisherTest {
     void non2xxResponsesCountAsFailedDeliveries() throws Exception {
         status.set(500);
         int port = startServer();
-        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 1000, 0, Logger.getLogger("test"));
+        publisher = new EventPublisher("http://127.0.0.1:" + port, SECRET, 32, 1, 1000, 1000, 0, LoggerFactory.getLogger("test"));
         assertTrue(publisher.submit(joinPayload()));
         assertTrue(publisher.awaitDrain(5000L));
 

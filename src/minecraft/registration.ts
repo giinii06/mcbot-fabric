@@ -48,6 +48,10 @@ export type UnregisterResult =
   | { ok: true; registration: Registration }
   | { ok: false; reason: string };
 
+/** Shown when a retired Bedrock registration is attempted (including old pending buttons). */
+export const BEDROCK_REGISTRATION_DISABLED =
+  "이 서버는 Java 전용이라 Bedrock 등록/화이트리스트를 지원하지 않습니다. 기존 기록은 보존됩니다.";
+
 function limitReason(seconds: number): string {
   return `잠시 후 다시 시도해 주세요. (${seconds}초 후 가능)`;
 }
@@ -133,10 +137,16 @@ function candidateFromRegistration(reg: Registration): IdentityCandidate {
 
 /**
  * Java registration updates the whitelist before saving, with rollback on failure.
- * Bedrock registration only saves the Discord link.
+ * Bedrock registration is disabled: the server is Java-only and old Bedrock rows
+ * stay untouched until the user removes them with `/유저해제`.
  */
 export async function commitRegistration(services: Services, input: CommitInput): Promise<CommitResult> {
   const { guildId, userId, candidate } = input;
+
+  if (candidate.edition === "BEDROCK") {
+    return { ok: false, reason: BEDROCK_REGISTRATION_DISABLED, stage: "duplicate" };
+  }
+
   const now = services.now();
 
   const existingUser = services.repos.getRegistration(guildId, userId, candidate.edition);
