@@ -1,0 +1,42 @@
+name: Windows client release
+
+on:
+  push:
+    tags: ['client-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      MINECRAFT_SERVER_ADDRESS: ${{ vars.MINECRAFT_SERVER_ADDRESS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          if ($env:MINECRAFT_SERVER_ADDRESS -cnotmatch '\A(?:[A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:]+\]):[0-9]{1,5}\z') {
+            throw 'Set the MINECRAFT_SERVER_ADDRESS repository variable to the Java server host:port.'
+          }
+          Copy-Item server/mods.lock.json client/mods.lock.json
+          $env:GOARCH = 'amd64'
+          $env:CGO_ENABLED = '0'
+          go build -trimpath -ldflags "-s -w -X main.serverAddress=$env:MINECRAFT_SERVER_ADDRESS" -o MCBot-Cobblemon-Setup.exe client/main.go
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+
+      - name: Verify install and reinstall on Windows
+        shell: pwsh
+        run: ./client/smoke-test.ps1
+
+      - name: Publish installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME MCBot-Cobblemon-Setup.exe --verify-tag --title "Cobblemon Windows installer ($env:GITHUB_REF_NAME)" --notes "Windows x64 · Minecraft Java 1.21.1 · Fabric + Cobblemon. 공식 Minecraft Launcher에서 Java Edition에 로그인한 뒤 런처를 닫고 EXE를 실행하세요. 설치 후 Cobblemon Server 프로필로 시작하면 멀티플레이 목록에 서버가 저장되어 있습니다."

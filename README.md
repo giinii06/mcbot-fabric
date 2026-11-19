@@ -78,6 +78,19 @@ OCI에서는 NSG/Security List ingress를 **TCP 25565**만 열고 SSH 규칙을 
 
 ### 게임 클라이언트 (접속하는 사람)
 
+#### Windows x64에서 설치하기
+
+1. 공식 Minecraft Launcher에서 Java Edition에 로그인한 뒤 런처를 닫으세요.
+2. [GitHub Releases](https://github.com/giinii06/mcbot-fabric/releases)에서 `MCBot-Cobblemon-Setup.exe`를 받아 한 번 실행하세요.
+3. 런처를 다시 열고 **Java Edition → 설치 설정 → Cobblemon Server**에서 실행하세요.
+4. 게임의 **멀티플레이**에서 저장된 **Cobblemon Server**에 접속하세요.
+
+설치기는 서버와 같은 Fabric Loader, Fabric API, Cobblemon을 전용 게임 폴더에 설정합니다. 저장소가 비공개이므로 GitHub 다운로드에는 접근 권한이 필요합니다. 서버의 화이트리스트는 그대로 적용됩니다.
+
+새 설치기를 배포하려면 저장소 변수 `MINECRAFT_SERVER_ADDRESS`에 공개 Java 접속 주소를 `호스트:포트` 형식으로 설정한 뒤 `client-v*` 태그를 푸시하세요. 같은 모드 목록으로 다시 설치하면 기존 서버 목록을 유지합니다.
+
+#### 수동으로 설치하기
+
 Cobblemon은 서버 전용 모드가 **아닙니다**. 들어가는 사람도 같은 버전을 설치해야 합니다.
 
 1. **Minecraft Java Edition 1.21.1** (공식 런처, Microsoft 계정)
