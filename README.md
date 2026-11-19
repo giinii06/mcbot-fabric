@@ -76,6 +76,23 @@ mcbot (Bun, :47865)  ── POST /ops ──────────────
 OCI에서는 NSG/Security List ingress를 **TCP 25565**만 열고 SSH 규칙을 유지하세요.
 25575, 8765, 19132는 열지 않습니다.
 
+### 게임 클라이언트 (접속하는 사람)
+
+Cobblemon은 서버 전용 모드가 **아닙니다**. 들어가는 사람도 같은 버전을 설치해야 합니다.
+
+1. **Minecraft Java Edition 1.21.1** (공식 런처, Microsoft 계정)
+2. **Fabric Loader for 1.21.1** — https://fabricmc.net/use/installer/
+3. 클라이언트 `.minecraft/mods/`에 서버와 **동일한 버전** 넣기:
+   - [Fabric API `0.116.18+1.21.1`](https://modrinth.com/mod/fabric-api/version/0.116.18+1.21.1)
+   - [Cobblemon `1.8.4F` (1.21.1 Fabric)](https://modrinth.com/mod/cobblemon/version/1.8.4F)
+4. Fabric 1.21.1 프로필로 실행 → 멀티플레이 → `공인IP:25565`
+
+바닐라 1.21.1 클라이언트는 접속은 시도할 수 있어도 파티·PC·포켓몬 모델 등
+Cobblemon의 클라이언트 UI/에셋을 사용할 수 없어 지원되지 않습니다. 클라이언트와
+서버의 Cobblemon 버전이 다르면 충돌·문제가 발생할 수 있으니 반드시 같은 버전을
+사용하세요. 리소스 팩은 선택 사항입니다. Discord 봇/브릿지 모드는 클라이언트에
+필요 없습니다.
+
 ## 4. 신규 설치
 
 ```bash
