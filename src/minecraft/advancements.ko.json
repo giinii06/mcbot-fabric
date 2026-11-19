@@ -1,4 +1,187 @@
 {
+  "cobblemon:agriculture/brew_all_potions": {
+    "title": "극심한 약물중독"
+  },
+  "cobblemon:agriculture/brew_full_restore": {
+    "title": "챔피언의 선택"
+  },
+  "cobblemon:agriculture/brew_medicinal_brew": {
+    "title": "동네 약국"
+  },
+  "cobblemon:agriculture/brew_potion": {
+    "title": "기초적인 회복 아이템"
+  },
+  "cobblemon:agriculture/cook_all_ev_mochi": {
+    "title": "모찌 모찌!"
+  },
+  "cobblemon:agriculture/cook_all_regional_delicacies": {
+    "title": "지역 맛집 투어"
+  },
+  "cobblemon:agriculture/cook_poke_snack": {
+    "title": "달콤한 향기에 이끌린다"
+  },
+  "cobblemon:agriculture/harvest_apricorn": {
+    "title": "과일이야? 견과류야?"
+  },
+  "cobblemon:agriculture/obtain_all_berries": {
+    "title": "모든 열매의 아버지"
+  },
+  "cobblemon:agriculture/obtain_berry": {
+    "title": "Very 베리"
+  },
+  "cobblemon:agriculture/obtain_mutated_berry": {
+    "title": "상상도 못한 정체"
+  },
+  "cobblemon:agriculture/obtain_revival_herb": {
+    "title": "정신이 번쩍드는 풀"
+  },
+  "cobblemon:agriculture/place_campfire_pot": {
+    "title": "늘 밥을 해줬어"
+  },
+  "cobblemon:agriculture/plant_all_apricorn_sprouts": {
+    "title": "규토리의 숲"
+  },
+  "cobblemon:agriculture/root_agriculture": {
+    "title": "대자연의 선물"
+  },
+  "cobblemon:agriculture/use_exp_candy": {
+    "title": "충치 조심"
+  },
+  "cobblemon:agriculture/use_healing_machine": {
+    "title": "회복의 힘"
+  },
+  "cobblemon:agriculture/use_iv_candy": {
+    "title": "다양한 포켓몬, 다양한 사탕"
+  },
+  "cobblemon:agriculture/use_mint": {
+    "title": "치약맛 민트"
+  },
+  "cobblemon:agriculture/use_revive": {
+    "title": "짜잔! 내가 돌아왔다!"
+  },
+  "cobblemon:battle/root_battle": {
+    "title": "쉽네ㅋ"
+  },
+  "cobblemon:catching/catch_alpha_wailord": {
+    "title": "초호화 유람선!"
+  },
+  "cobblemon:catching/collect_all_vivillon": {
+    "title": "아름다운 날개"
+  },
+  "cobblemon:catching/collect_all_vivillon_full": {
+    "title": "찬란하게 아름다운 날개"
+  },
+  "cobblemon:catching/craft_all_balls": {
+    "title": "몬스터볼 매니아"
+  },
+  "cobblemon:catching/craft_ancient_balls": {
+    "title": "골동품 수집가"
+  },
+  "cobblemon:catching/craft_apricorn_balls": {
+    "title": "강집님을 본받아서"
+  },
+  "cobblemon:catching/craft_basic_balls": {
+    "title": "알록달록볼"
+  },
+  "cobblemon:catching/craft_master_rod": {
+    "title": "포켓몬 낚시의 달인"
+  },
+  "cobblemon:catching/craft_pokedex": {
+    "title": "하이테크한 도구"
+  },
+  "cobblemon:catching/craft_rod": {
+    "title": "패셔니스타 낚시꾼"
+  },
+  "cobblemon:catching/evolve_gholdengo_netherite": {
+    "title": "잔해에 파묻히다"
+  },
+  "cobblemon:catching/evolve_shedinja": {
+    "title": "껍질 속의 유령"
+  },
+  "cobblemon:catching/first_alpha_catch": {
+    "title": "리더를 따르라"
+  },
+  "cobblemon:catching/first_catch": {
+    "title": "새로운 동료!"
+  },
+  "cobblemon:catching/first_evolution": {
+    "title": "노력의 결실"
+  },
+  "cobblemon:catching/first_shiny_catch": {
+    "title": "행운의 색"
+  },
+  "cobblemon:catching/full_party": {
+    "title": "풀하우스"
+  },
+  "cobblemon:catching/interact_with_pokemon": {
+    "title": "우리는 모두 친구"
+  },
+  "cobblemon:catching/max_level_baby": {
+    "title": "다윈? 그게 누군데?"
+  },
+  "cobblemon:catching/max_ride_stats": {
+    "title": "스타 라이딩 포켓몬"
+  },
+  "cobblemon:catching/ride_pokemon": {
+    "title": "포켓몬 라이딩!"
+  },
+  "cobblemon:catching/root_catching": {
+    "title": "이걸로 다 잡아버리겠다"
+  },
+  "cobblemon:catching/slather_saccharine": {
+    "title": "달콤한 향기"
+  },
+  "cobblemon:catching/trade_pokemon": {
+    "title": "잘 부탁해!"
+  },
+  "cobblemon:catching/trade_shelmet_karrablast": {
+    "title": "껍질 도둑이야!"
+  },
+  "cobblemon:catching/use_pasture": {
+    "title": "유목인의 삶"
+  },
+  "cobblemon:catching/use_poke_bait": {
+    "title": "미끼 미끼"
+  },
+  "cobblemon:geological/construct_note_block_sequencer": {
+    "title": "과학의 힘이란 대단해!"
+  },
+  "cobblemon:geological/download_porygon": {
+    "title": "폴리곤 다운로드"
+  },
+  "cobblemon:geological/obtain_ancient_tm": {
+    "title": "조상의 지혜"
+  },
+  "cobblemon:geological/obtain_fossil": {
+    "title": "화석 수집가"
+  },
+  "cobblemon:geological/obtain_tm": {
+    "title": "기술을 보여줘!"
+  },
+  "cobblemon:geological/obtain_tumblestone": {
+    "title": "둥글둥글 옥돌"
+  },
+  "cobblemon:geological/plant_tumblestone": {
+    "title": "자라는 돌...?"
+  },
+  "cobblemon:geological/plant_type_gem": {
+    "title": "보석이다!"
+  },
+  "cobblemon:geological/register_all_tms": {
+    "title": "레코딩 마스터"
+  },
+  "cobblemon:geological/resurrect_galar_fossil": {
+    "title": "어라? 여기가 아닌가?"
+  },
+  "cobblemon:geological/resurrect_pokemon": {
+    "title": "쥬라기 월드"
+  },
+  "cobblemon:geological/root_geological": {
+    "title": "신비한 돌"
+  },
+  "cobblemon:root": {
+    "title": "코블몬의 세계에 잘 왔다!"
+  },
   "minecraft:adventure/adventuring_time": {
     "title": "모험의 시간",
     "description": "모든 생물 군계를 발견하세요"

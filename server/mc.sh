@@ -174,7 +174,7 @@ check() {
   docker exec minecraft sh -c 'tr "\000" " " </proc/1/cmdline' | grep -ci 'fabric' >/dev/null || die 'Fabric loader not in the server process'
 
   local difficulty max_players
-  difficulty="$(env_get_default DIFFICULTY easy)"
+  difficulty="$(env_get_default DIFFICULTY peaceful)"
   max_players="$(env_get_default MAX_PLAYERS 1000)"
   for property in online-mode=true white-list=true enforce-whitelist=true "max-players=$max_players" \
     gamemode=survival "difficulty=$difficulty" "view-distance=$(env_get_default VIEW_DISTANCE 6)" \

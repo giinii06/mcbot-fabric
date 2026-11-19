@@ -70,7 +70,7 @@ append_env() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }
 set_env MC_VERSION 1.21.1
 set_env FABRIC_LOADER_VERSION 0.20.1
 set_env FABRIC_INSTALLER_VERSION 1.1.2
-append_env DIFFICULTY easy
+append_env DIFFICULTY peaceful
 if grep -qE '^(PAPER_|GEYSER_|FLOODGATE_|CHUNKY_)' .env; then
   echo 'NOTE: legacy Paper/Geyser entries in .env are ignored by the Fabric compose file.'
 fi

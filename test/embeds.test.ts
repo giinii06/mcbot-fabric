@@ -45,6 +45,15 @@ describe("advancementEmbed", () => {
       ]);
     }
   });
+
+  test("uses the Cobblemon Korean title for the root advancement", () => {
+    const embed = advancementEmbed(PLAYER, DISCORD, {
+      key: "cobblemon:root", title: "The World of Cobblemon!",
+    }).toJSON();
+    expect(embed.fields).toEqual([
+      { name: "도전과제", value: "코블몬의 세계에 잘 왔다!" },
+    ]);
+  });
 });
 
 describe("joinEmbed", () => {

@@ -40,7 +40,7 @@ fabric-api-0.116.18+1.21.1.jar
 | `docker compose config -q` | 통과 |
 | `./mc.sh verify-mods` | 3개(모드 2 + 브릿지) 통과 |
 
-## 실제 기동
+## 최초 구축 시 기동
 
 - `docker compose up -d` → `minecraft` healthy, `minecraft-backup` running
 - 서버 로그: `Starting minecraft server version 1.21.1`, `Done (22.465s)!`
@@ -48,7 +48,14 @@ fabric-api-0.116.18+1.21.1.jar
 - Fabric: `fabric-server-mc.1.21.1-loader.0.20.1-launcher.1.1.2.jar`
 - 메모리: 게임 약 2.2~2.9GiB / 8GiB, 백업 약 10MiB / 512MiB
 - `keepInventory`: 세 차원 모두 `true` (RCON startup)
-- difficulty: `easy`
+- 최초 구축 시 난이도: `easy`
+
+## 운영 설정 변경 확인
+
+- 난이도를 `peaceful`로 바꾸고 서버를 재시작한 뒤 `server.properties`와 RCON의 `difficulty`로 확인했습니다.
+- 오버월드, 네더, 엔드에서 `keepInventory=true`를 RCON으로 확인했습니다.
+- Cobblemon 1.8.4의 공식 한국어 제목 61개를 봇에 반영했습니다. 운영 봇 컨테이너에서 `cobblemon:root`의 한국어 제목을 확인했으며, 변경 후 `bun test`는 168개를 통과했습니다.
+- `client-v1.1.1`은 GitHub Actions에서 Windows와 macOS 설치·재설치 검증을 통과했습니다.
 
 ## 브릿지 API 실측
 
@@ -75,7 +82,7 @@ fabric-api-0.116.18+1.21.1.jar
 - `./mc.sh restore` → `data-cobblemon.before-restore-20261119-074956/` 보호 사본 생성,
   복구 후 `./mc.sh start` 및 `./mc.sh check` 통과
 
-## 미검증
+## 최초 구축 당시 미검증
 
 - 실제 Java 클라이언트 접속과 join/chat/death/advancement 이벤트
 - 실제 Discord 토큰으로 게이트웨이·슬래시 명령 실행

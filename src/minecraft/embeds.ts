@@ -4,8 +4,8 @@ import { truncate, type DiscordDisplaySource } from "../core/user";
 import type { PlayerRef, Edition } from "../bridge/protocol";
 import advancementsKo from "./advancements.ko.json";
 
-// Official Minecraft 26.3 ko_kr translations, indexed by advancement ID.
-const KOREAN_ADVANCEMENTS: Record<string, { title: string; description: string }> = advancementsKo;
+// Official ko_kr translations from Minecraft 26.3 and Cobblemon 1.8.4, indexed by advancement ID.
+const KOREAN_ADVANCEMENTS: Record<string, { title: string }> = advancementsKo;
 
 export const EMBED_COLORS = {
   JOIN: 0x57f287,

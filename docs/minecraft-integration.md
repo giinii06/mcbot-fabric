@@ -12,18 +12,17 @@
 └───────────┬────────────┘
             │ discord.js
 ┌───────────▼────────────┐   POST /bridge/events   ┌─────────────────────────────┐
-│ mcbot (Bun)            │ ───────────────────────▶│ minecraft (Fabric)          │
+│ mcbot (Bun)            │ ◀───────────────────────│ minecraft (Fabric)          │
 │  :47865                │   Authorization:        │  MinecraftBridge 모드        │
 │  GET /health           │   Bearer <시크릿>        │  0.0.0.0:8765               │
-│  POST /bridge/events   │ ◀───────────────────────│  GET  /health               │
+│  POST /bridge/events   │ ───────────────────────▶│  GET  /health               │
 └────────────────────────┘   POST /ops              │  POST /ops                  │
-        외부 Docker 네트워크 `mc-discord` (포트 호스트 미게시)
+        Docker 네트워크 `mc-discord` (봇 47865는 호스트 루프백에도 바인딩)
 ```
 
 - 양방향 모두 공유 시크릿 `MC_BRIDGE_SECRET`으로 인증합니다.
   `Authorization: Bearer` 또는 `X-Bridge-Secret`, 타이밍 안전 비교, 실패 401.
-- 브릿지는 Fabric 이벤트를 사용합니다. 로그 tail, RCON polling, `/list` 주기 실행은
-  사용하지 않습니다. RCON은 백업 전용입니다.
+- 브릿지는 Fabric 이벤트를 사용합니다. RCON은 백업, 시작 시 게임 규칙 적용, 운영 점검에 사용합니다.
 - 모든 게임 상태 접근은 서버 스레드로 위임되고 4초 타임아웃이 적용됩니다.
 - 봇은 Discord 토큰 없이도 브릿지 health/이벤트 검증용으로 기동할 수 있습니다.
 
@@ -40,6 +39,8 @@
 
 공통: `eventId`(UUID), `ts`. 좌표/월드/바이오는 넣지 않습니다.
 `player.identity`(Bedrock 인증 이벤트)는 새 서버에서 발생하지 않습니다.
+
+봇은 `advancement.key`를 [한국어 제목 목록](../src/minecraft/advancements.ko.json)에서 조회합니다. 번역이 있으면 한국어 제목을, 없으면 이벤트의 `title`을 Discord에 표시합니다. Cobblemon 제목은 서버가 사용하는 1.8.4 JAR의 `ko_kr` 리소스에서 가져왔습니다.
 
 ### Ops (봇 → 브릿지, `POST /ops`)
 
@@ -78,31 +79,9 @@
 
 ## 4. 배포
 
-```bash
-# 1) 네트워크 (1회)
-docker network create mc-discord
+서버 파일 준비, 브릿지 시크릿 설정 및 기동 순서는 [루트 README의 배포 절차](../README.md#서버와-봇-배포)를 따르세요.
 
-# 2) 브릿지 빌드
-bun run minecraft:build-plugin
-
-# 3) 서버 설치/기동
-cd server
-cp .env.example .env
-./install.sh --no-start
-./mc.sh start
-./mc.sh check
-cd ..
-
-# 4) 봇
-cp .env.example .env
-# DISCORD_TOKEN, DISCORD_APPLICATION_ID, MC_BRIDGE_SECRET 입력
-docker compose up -d --build
-```
-
-시크릿은 `server/secrets/bridge_secret` ↔ 루트 `.env`의 `MC_BRIDGE_SECRET`에서
-동일해야 합니다. 값은 출력하거나 커밋하지 않습니다.
-
-## 5. 검증 기록 (2026-11-19)
+## 5. 최초 구축 검증 기록 (2026-11-19)
 
 | 항목 | 결과 |
 |---|---|

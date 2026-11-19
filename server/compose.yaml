@@ -58,7 +58,7 @@ services:
       ENABLE_WHITELIST: "true"
       ENFORCE_WHITELIST: "true"
       MODE: survival
-      DIFFICULTY: ${DIFFICULTY:-easy}
+      DIFFICULTY: ${DIFFICULTY:-peaceful}
       PVP: "true"
       VIEW_DISTANCE: "${VIEW_DISTANCE:-6}"
       SIMULATION_DISTANCE: "${SIMULATION_DISTANCE:-4}"

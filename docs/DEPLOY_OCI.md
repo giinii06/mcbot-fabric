@@ -25,14 +25,13 @@ java -version
 ## 2. 소스와 시크릿
 
 ```bash
-git clone <repo> ~/mcbot
+git clone git@github.com:giinii06/mcbot-fabric.git ~/mcbot
 cd ~/mcbot
-
-bun run minecraft:build-plugin     # 또는 JDK 21이 있는 빌드 호스트에서 수행
 
 cd server
 cp .env.example .env
 chmod 600 .env
+# MC_UID/GID를 호스트 사용자에 맞추고 DIFFICULTY=peaceful을 확인
 ./install.sh --no-start
 ```
 
@@ -52,8 +51,9 @@ chmod 600 .env
 ## 3. 시작
 
 ```bash
-cd server && ./mc.sh start && ./mc.sh check && cd ..
-docker compose up -d --build
+docker compose up -d --build --wait
+docker compose --project-directory server up -d --wait
+./server/mc.sh check
 curl -fsS http://127.0.0.1:47865/health
 ```
 
