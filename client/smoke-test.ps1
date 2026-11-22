@@ -21,7 +21,22 @@ foreach ($file in $launcherFiles) {
 
 $lock = Get-Content server/mods.lock.json -Raw | ConvertFrom-Json
 $versionId = "fabric-loader-$($lock.minecraft.loaderVersion)-$($lock.minecraft.version)"
-foreach ($attempt in 1..2) {
+function Get-StringTag([string]$name, [string]$value) {
+    $key = [Convert]::ToHexString([Text.Encoding]::ASCII.GetBytes($name))
+    $text = [Convert]::ToHexString([Text.Encoding]::ASCII.GetBytes($value))
+    return '08{0:X4}{1}{2:X4}{3}' -f $name.Length, $key, $value.Length, $text
+}
+$header = '0A0000090007736572766572730A'
+$nameTag = Get-StringTag 'name' 'Cobblemon Server'
+$ipTag = Get-StringTag 'ip' $env:MINECRAFT_SERVER_ADDRESS
+$oldIpTag = Get-StringTag 'ip' '140.245.73.42:25565'
+# Include a vanilla icon byte array and a separately named entry using the old address.
+$iconTag = '07000469636F6E0000000400010203'
+$other = (Get-StringTag 'name' 'Keep me') + $oldIpTag + '00'
+$fresh = "${header}00000001${nameTag}${ipTag}0000"
+$previous = "${header}00000002${oldIpTag}${iconTag}${nameTag}00${other}00"
+$migrated = "${header}00000002${ipTag}${iconTag}${nameTag}00${other}00"
+foreach ($attempt in 1..3) {
     '' | & $installer @installerArgs
     if ($LASTEXITCODE -ne 0) { throw "Installer failed on attempt $attempt" }
     foreach ($file in $launcherFiles) {
@@ -44,12 +59,12 @@ foreach ($attempt in 1..2) {
 
     $path = Join-Path $profile.gameDir 'servers.dat'
     $bytes = [IO.File]::ReadAllBytes($path)
-    $length = $env:MINECRAFT_SERVER_ADDRESS.Length.ToString('X4')
-    $address = [Convert]::ToHexString([Text.Encoding]::ASCII.GetBytes($env:MINECRAFT_SERVER_ADDRESS))
-    $expected = "0A0000090007736572766572730A000000010800046E616D650010436F62626C656D6F6E205365727665720800026970${length}${address}0000"
+    $expected = if ($attempt -eq 1) { $fresh } else { $migrated }
     if ([Convert]::ToHexString($bytes) -ne $expected) { throw 'Incorrect saved server NBT' }
 
     if ($attempt -eq 1) {
+        [IO.File]::WriteAllBytes($path, [Convert]::FromHexString($previous))
+    } elseif ($attempt -eq 2) {
         # A timestamp comparison detects a rewrite even when the bytes are identical.
         [IO.File]::SetLastWriteTimeUtc($path, [DateTime]::UnixEpoch.AddDays(365 * 40))
         $savedAt = [IO.File]::GetLastWriteTimeUtc($path)

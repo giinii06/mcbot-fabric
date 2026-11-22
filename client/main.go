@@ -31,6 +31,8 @@ var client = &http.Client{Timeout: 15 * time.Minute}
 var hostPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`)
 
 const profileName = "Cobblemon Server"
+const previousServerAddress = "140.245.73.42:25565"
+const serverListHeader = "\x0a\x00\x00\x09\x00\x07servers\x0a"
 
 type mod struct {
 	File, URL, SHA256 string
@@ -176,13 +178,7 @@ func install(root, address string) error {
 	}
 
 	serversPath := filepath.Join(gameDir, "servers.dat")
-	// shortcut: preserve the entire server list on reinstall, add an NBT merge if server addresses need in-place migration.
-	if _, err := os.Stat(serversPath); errors.Is(err, os.ErrNotExist) {
-		serverList := serverNBT(address)
-		if err := write(serversPath, bytes.NewReader(serverList).WriteTo); err != nil {
-			return err
-		}
-	} else if err != nil {
+	if err := saveServerList(serversPath, address); err != nil {
 		return err
 	}
 	for _, path := range profiles {
@@ -223,11 +219,25 @@ func updateProfile(path string, entry json.RawMessage) ([]byte, error) {
 	return json.MarshalIndent(launcher, "", "  ")
 }
 
+func saveServerList(path, address string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return write(path, bytes.NewReader(serverNBT(address)).WriteTo)
+	}
+	if err != nil {
+		return err
+	}
+	updated := migrateServerNBT(data, address)
+	if bytes.Equal(data, updated) {
+		return nil
+	}
+	return write(path, bytes.NewReader(updated).WriteTo)
+}
+
 func serverNBT(address string) []byte {
 	// An uncompressed NBT root compound with one entry in the servers list.
-	out := bytes.NewBuffer([]byte{10, 0, 0, 9, 0, 7})
-	out.WriteString("servers")
-	out.Write([]byte{10, 0, 0, 0, 1})
+	out := bytes.NewBufferString(serverListHeader)
+	out.Write([]byte{0, 0, 0, 1})
 	for _, field := range [][2]string{{"name", profileName}, {"ip", address}} {
 		out.WriteByte(8)
 		for _, value := range field {
@@ -237,6 +247,86 @@ func serverNBT(address string) []byte {
 	}
 	out.Write([]byte{0, 0})
 	return out.Bytes()
+}
+
+func migrateServerNBT(data []byte, address string) []byte {
+	if !bytes.HasPrefix(data, []byte(serverListHeader)) {
+		return data
+	}
+	r := bytes.NewReader(data[len(serverListHeader):])
+	var count uint32
+	if binary.Read(r, binary.BigEndian, &count) != nil || uint64(count) >= uint64(r.Len()) {
+		return data
+	}
+	var updated []byte
+	last := 0
+	for range count {
+		var name, ip string
+		var ipStart, ipEnd int
+		for {
+			kind, err := r.ReadByte()
+			if err != nil {
+				return data
+			}
+			if kind == 0 {
+				break
+			}
+			key, err := readNBTString(r)
+			if err != nil {
+				return data
+			}
+			switch kind {
+			case 1:
+				if _, err := r.ReadByte(); err != nil {
+					return data
+				}
+			case 7:
+				var size uint32
+				if binary.Read(r, binary.BigEndian, &size) != nil || uint64(size) > uint64(r.Len()) {
+					return data
+				}
+				r.Seek(int64(size), io.SeekCurrent)
+			case 8:
+				start := len(data) - r.Len()
+				value, err := readNBTString(r)
+				if err != nil {
+					return data
+				}
+				switch key {
+				case "name":
+					name = value
+				case "ip":
+					ip, ipStart, ipEnd = value, start, len(data)-r.Len()
+				}
+			default:
+				// shortcut: leave unfamiliar server-list formats intact, extend the tag reader if Minecraft adds fields.
+				return data
+			}
+		}
+		if name == profileName && ip == previousServerAddress {
+			updated = append(updated, data[last:ipStart]...)
+			updated = binary.BigEndian.AppendUint16(updated, uint16(len(address)))
+			updated = append(updated, address...)
+			last = ipEnd
+		}
+	}
+	if last == 0 || r.Len() == 0 || data[len(data)-1] != 0 {
+		return data
+	}
+	return append(updated, data[last:]...)
+}
+
+func readNBTString(r *bytes.Reader) (string, error) {
+	var size uint16
+	if err := binary.Read(r, binary.BigEndian, &size); err != nil {
+		return "", err
+	}
+	if int(size) > r.Len() {
+		return "", io.ErrUnexpectedEOF
+	}
+	data := make([]byte, size)
+	_, err := io.ReadFull(r, data)
+	return string(data), err
 }
 
 func installMod(dir string, mod mod) error {
